@@ -1,28 +1,20 @@
 /**
  * 消息处理器
- *
- * 处理接收到的 QQ 消息事件，包含：
- * - 命令解析与分发
- * - CD 冷却管理
- * - 消息发送工具函数
- *
- * 最佳实践：将不同类型的业务逻辑拆分到不同的 handler 文件中，
- * 保持每个文件职责单一。
+ * 处理接收到的 QQ 消息事件，包含命令解析与分发
  */
 
-import type { OB11Message, OB11PostSendMsg } from 'napcat-types/napcat-onebot';
+import type { OB11Message } from 'napcat-types/napcat-onebot';
 import type { NapCatPluginContext } from 'napcat-types/napcat-onebot/network/plugin/types';
 import { pluginState } from '../core/state';
+import { sendGroupMessage } from '../services/message/text';
+import { sendForward } from '../services/message/forward';
+import * as rss from '../services/rss';
+import * as storage from '../services/rss/storage';
+import { feedScheduler } from '../core/scheduler';
+import { testFeed } from '../services/rss/fetcher';
 
-// ==================== CD 冷却管理 ====================
-
-/** CD 冷却记录 key: `${groupId}:${command}`, value: 过期时间戳 */
 const cooldownMap = new Map<string, number>();
 
-/**
- * 检查是否在 CD 中
- * @returns 剩余秒数，0 表示可用
- */
 function getCooldownRemaining(groupId: number | string, command: string): number {
     const cdSeconds = pluginState.config.cooldownSeconds ?? 60;
     if (cdSeconds <= 0) return 0;
@@ -39,223 +31,379 @@ function getCooldownRemaining(groupId: number | string, command: string): number
     return remaining;
 }
 
-/** 设置 CD 冷却 */
 function setCooldown(groupId: number | string, command: string): void {
     const cdSeconds = pluginState.config.cooldownSeconds ?? 60;
     if (cdSeconds <= 0) return;
     cooldownMap.set(`${groupId}:${command}`, Date.now() + cdSeconds * 1000);
 }
 
-// ==================== 消息发送工具 ====================
-
-/**
- * 发送消息（通用）
- * 根据消息类型自动发送到群或私聊
- *
- * @param ctx 插件上下文
- * @param event 原始消息事件（用于推断回复目标）
- * @param message 消息内容（支持字符串或消息段数组）
- */
-export async function sendReply(
-    ctx: NapCatPluginContext,
-    event: OB11Message,
-    message: OB11PostSendMsg['message']
-): Promise<boolean> {
-    try {
-        const params: OB11PostSendMsg = {
-            message,
-            message_type: event.message_type,
-            ...(event.message_type === 'group' && event.group_id
-                ? { group_id: String(event.group_id) }
-                : {}),
-            ...(event.message_type === 'private' && event.user_id
-                ? { user_id: String(event.user_id) }
-                : {}),
-        };
-        await ctx.actions.call('send_msg', params, ctx.adapterName, ctx.pluginManager.config);
-        return true;
-    } catch (error) {
-        pluginState.logger.error('发送消息失败:', error);
-        return false;
-    }
-}
-
-/**
- * 发送群消息
- */
-export async function sendGroupMessage(
-    ctx: NapCatPluginContext,
-    groupId: number | string,
-    message: OB11PostSendMsg['message']
-): Promise<boolean> {
-    try {
-        const params: OB11PostSendMsg = {
-            message,
-            message_type: 'group',
-            group_id: String(groupId),
-        };
-        await ctx.actions.call('send_msg', params, ctx.adapterName, ctx.pluginManager.config);
-        return true;
-    } catch (error) {
-        pluginState.logger.error('发送群消息失败:', error);
-        return false;
-    }
-}
-
-/**
- * 发送私聊消息
- */
-export async function sendPrivateMessage(
-    ctx: NapCatPluginContext,
-    userId: number | string,
-    message: OB11PostSendMsg['message']
-): Promise<boolean> {
-    try {
-        const params: OB11PostSendMsg = {
-            message,
-            message_type: 'private',
-            user_id: String(userId),
-        };
-        await ctx.actions.call('send_msg', params, ctx.adapterName, ctx.pluginManager.config);
-        return true;
-    } catch (error) {
-        pluginState.logger.error('发送私聊消息失败:', error);
-        return false;
-    }
-}
-
-// ==================== 合并转发消息 ====================
-
-/** 合并转发消息节点 */
-export interface ForwardNode {
-    type: 'node';
-    data: {
-        nickname: string;
-        user_id?: string;
-        content: Array<{ type: string; data: Record<string, unknown> }>;
-    };
-}
-
-/**
- * 发送合并转发消息
- * @param ctx 插件上下文
- * @param target 群号或用户 ID
- * @param isGroup 是否为群消息
- * @param nodes 合并转发节点列表
- */
-export async function sendForwardMsg(
-    ctx: NapCatPluginContext,
-    target: number | string,
-    isGroup: boolean,
-    nodes: ForwardNode[],
-): Promise<boolean> {
-    try {
-        const actionName = isGroup ? 'send_group_forward_msg' : 'send_private_forward_msg';
-        const params: Record<string, unknown> = { message: nodes };
-        if (isGroup) {
-            params.group_id = String(target);
-        } else {
-            params.user_id = String(target);
-        }
-        await ctx.actions.call(
-            actionName as 'send_group_forward_msg',
-            params as never,
-            ctx.adapterName,
-            ctx.pluginManager.config,
-        );
-        return true;
-    } catch (error) {
-        pluginState.logger.error('发送合并转发消息失败:', error);
-        return false;
-    }
-}
-
-// ==================== 权限检查 ====================
-
-/**
- * 检查群聊中是否有管理员权限
- * 私聊消息默认返回 true
- */
-export function isAdmin(event: OB11Message): boolean {
-    if (event.message_type !== 'group') return true;
-    const role = (event.sender as Record<string, unknown>)?.role;
-    return role === 'admin' || role === 'owner';
-}
-
-// ==================== 消息处理主函数 ====================
-
-/**
- * 消息处理主函数
- * 在这里实现你的命令处理逻辑
- */
 export async function handleMessage(ctx: NapCatPluginContext, event: OB11Message): Promise<void> {
     try {
         const rawMessage = event.raw_message || '';
         const messageType = event.message_type;
         const groupId = event.group_id;
-        const userId = event.user_id;
 
-        pluginState.ctx.logger.debug(`收到消息: ${rawMessage} | 类型: ${messageType}`);
-
-        // 群消息：检查该群是否启用
         if (messageType === 'group' && groupId) {
             if (!pluginState.isGroupEnabled(String(groupId))) return;
         }
 
-        // 检查命令前缀
-        const prefix = pluginState.config.commandPrefix || '#cmd';
+        const prefix = pluginState.config.commandPrefix || '#rss';
         if (!rawMessage.startsWith(prefix)) return;
 
-        // 解析命令参数
         const args = rawMessage.slice(prefix.length).trim().split(/\s+/);
         const subCommand = args[0]?.toLowerCase() || '';
 
-        // TODO: 在这里实现你的命令处理逻辑
         switch (subCommand) {
-            case 'help': {
-                const helpText = [
-                    `[= 插件帮助 =]`,
-                    `${prefix} help - 显示帮助信息`,
-                    `${prefix} ping - 测试连通性`,
-                    `${prefix} status - 查看运行状态`,
-                ].join('\n');
-                await sendReply(ctx, event, helpText);
+            case 'help':
+            case '?':
+                await sendHelp(ctx, event);
                 break;
-            }
-
-            case 'ping': {
-                // 群消息检查 CD
+            case 'add':
                 if (messageType === 'group' && groupId) {
-                    const remaining = getCooldownRemaining(groupId, 'ping');
+                    const remaining = getCooldownRemaining(groupId, 'add');
                     if (remaining > 0) {
-                        await sendReply(ctx, event, `请等待 ${remaining} 秒后再试`);
+                        await sendGroupMessage(ctx, groupId, `请等待 ${remaining} 秒后再试`);
                         return;
                     }
                 }
-
-                await sendReply(ctx, event, 'pong!');
-                if (messageType === 'group' && groupId) setCooldown(groupId, 'ping');
-                pluginState.incrementProcessed();
+                await handleAdd(ctx, event, args.slice(1));
                 break;
-            }
-
-            case 'status': {
-                const statusText = [
-                    `[= 插件状态 =]`,
-                    `运行时长: ${pluginState.getUptimeFormatted()}`,
-                    `今日处理: ${pluginState.stats.todayProcessed}`,
-                    `总计处理: ${pluginState.stats.processed}`,
-                ].join('\n');
-                await sendReply(ctx, event, statusText);
+            case 'del':
+            case 'delete':
+            case 'remove':
+                await handleDelete(ctx, event, args.slice(1));
                 break;
-            }
-
-            default: {
-                // TODO: 在这里处理你的主要命令逻辑
+            case 'list':
+            case 'ls':
+                await handleList(ctx, event);
                 break;
-            }
+            case 'set':
+                await handleSet(ctx, event, args.slice(1));
+                break;
+            case 'test':
+                await handleTest(ctx, event, args.slice(1));
+                break;
+            case 'enable':
+                await handleEnable(ctx, event, args.slice(1), true);
+                break;
+            case 'disable':
+                await handleEnable(ctx, event, args.slice(1), false);
+                break;
+            case 'check':
+                await handleCheck(ctx, event, args.slice(1));
+                break;
+            case 'status':
+                await handleStatus(ctx, event);
+                break;
         }
     } catch (error) {
         pluginState.logger.error('处理消息时出错:', error);
     }
+}
+
+async function sendHelp(ctx: NapCatPluginContext, event: OB11Message): Promise<void> {
+    const prefix = pluginState.config.commandPrefix || '#rss';
+    const helpText = [
+        `【${prefix} 帮助】`,
+        `${prefix} add <url> [name] - 添加订阅`,
+        `${prefix} del <id> - 删除订阅`,
+        `${prefix} list - 查看订阅列表`,
+        `${prefix} set <id> <key> <value> - 修改订阅配置`,
+        `${prefix} test <id> - 测试推送`,
+        `${prefix} enable <id> - 启用订阅`,
+        `${prefix} disable <id> - 禁用订阅`,
+        `${prefix} check <id> - 手动检查更新`,
+        `${prefix} status - 查看状态`,
+    ].join('\n');
+
+    const target = event.message_type === 'group' && event.group_id 
+        ? String(event.group_id) 
+        : undefined;
+    
+    if (target) {
+        await sendGroupMessage(ctx, target, helpText);
+    }
+}
+
+async function handleAdd(
+    ctx: NapCatPluginContext,
+    event: OB11Message,
+    args: string[]
+): Promise<void> {
+    if (args.length < 1) {
+        await sendGroupMessage(ctx, String(event.group_id), '用法: #rss add <url> [name]');
+        return;
+    }
+
+    const url = args[0];
+    const name = args.slice(1).join(' ') || new URL(url).hostname;
+
+    const feedId = storage.generateFeedId();
+    const feed = storage.getAllFeeds()[feedId] = {
+        id: feedId,
+        url,
+        name,
+        enabled: true,
+        updateInterval: pluginState.config.defaultUpdateInterval,
+        sendMode: pluginState.config.defaultSendMode,
+        groups: event.group_id ? [String(event.group_id)] : [],
+    };
+
+    storage.addFeed(feed);
+    feedScheduler.startFeed(feed);
+
+    await sendGroupMessage(
+        ctx, 
+        String(event.group_id), 
+        `已添加订阅: ${name}\nURL: ${url}\nID: ${feedId}`
+    );
+
+    if (event.message_type === 'group' && event.group_id) {
+        setCooldown(event.group_id, 'add');
+    }
+}
+
+async function handleDelete(
+    ctx: NapCatPluginContext,
+    event: OB11Message,
+    args: string[]
+): Promise<void> {
+    if (args.length < 1) {
+        await sendGroupMessage(ctx, String(event.group_id), '用法: #rss del <id>');
+        return;
+    }
+
+    const feedId = args[0];
+    const feed = storage.getFeed(feedId);
+
+    if (!feed) {
+        await sendGroupMessage(ctx, String(event.group_id), `未找到订阅: ${feedId}`);
+        return;
+    }
+
+    feedScheduler.stopFeed(feedId);
+    storage.deleteFeed(feedId);
+
+    await sendGroupMessage(ctx, String(event.group_id), `已删除订阅: ${feed.name}`);
+}
+
+async function handleList(
+    ctx: NapCatPluginContext,
+    event: OB11Message
+): Promise<void> {
+    const feeds = storage.getAllFeeds();
+    const feedList = Object.values(feeds);
+
+    if (feedList.length === 0) {
+        await sendGroupMessage(ctx, String(event.group_id), '暂无订阅，使用 #rss add <url> 添加');
+        return;
+    }
+
+    const lines = ['【订阅列表】'];
+    for (const feed of feedList) {
+        const status = feed.enabled ? '✅' : '❌';
+        const modeText = { single: '单条', forward: '合并', puppeteer: '图片' }[feed.sendMode];
+        lines.push(`${status} ${feed.name} (${feed.id})`);
+        lines.push(`   模式: ${modeText} | 群: ${feed.groups.length}个 | 间隔: ${feed.updateInterval}分钟`);
+    }
+
+    await sendGroupMessage(ctx, String(event.group_id), lines.join('\n'));
+}
+
+async function handleSet(
+    ctx: NapCatPluginContext,
+    event: OB11Message,
+    args: string[]
+): Promise<void> {
+    if (args.length < 3) {
+        await sendGroupMessage(
+            ctx, 
+            String(event.group_id), 
+            '用法: #rss set <id> <key> <value>\nkey: name/updateInterval/sendMode/groups'
+        );
+        return;
+    }
+
+    const [feedId, key, ...valueParts] = args;
+    const value = valueParts.join(' ');
+    const feed = storage.getFeed(feedId);
+
+    if (!feed) {
+        await sendGroupMessage(ctx, String(event.group_id), `未找到订阅: ${feedId}`);
+        return;
+    }
+
+    switch (key) {
+        case 'name':
+            storage.updateFeed(feedId, { name: value });
+            break;
+        case 'updateInterval':
+            const interval = parseInt(value, 10);
+            if (isNaN(interval) || interval < 5) {
+                await sendGroupMessage(ctx, String(event.group_id), '间隔时间不能小于5分钟');
+                return;
+            }
+            storage.updateFeed(feedId, { updateInterval: interval });
+            feedScheduler.startFeed({ ...feed, updateInterval: interval });
+            break;
+        case 'sendMode':
+            if (!['single', 'forward', 'puppeteer'].includes(value)) {
+                await sendGroupMessage(ctx, String(event.group_id), '发送方式: single/forward/puppeteer');
+                return;
+            }
+            storage.updateFeed(feedId, { sendMode: value as 'single' | 'forward' | 'puppeteer' });
+            break;
+        case 'groups':
+            const groups = value.split(',').map((g) => g.trim()).filter((g) => g);
+            storage.updateFeed(feedId, { groups });
+            break;
+        default:
+            await sendGroupMessage(ctx, String(event.group_id), `未知配置项: ${key}`);
+            return;
+    }
+
+    await sendGroupMessage(ctx, String(event.group_id), `已更新 ${feed.name} 的 ${key}`);
+}
+
+async function handleTest(
+    ctx: NapCatPluginContext,
+    event: OB11Message,
+    args: string[]
+): Promise<void> {
+    if (args.length < 1) {
+        await sendGroupMessage(ctx, String(event.group_id), '用法: #rss test <id>');
+        return;
+    }
+
+    const feedId = args[0];
+    const feed = storage.getFeed(feedId);
+
+    if (!feed) {
+        await sendGroupMessage(ctx, String(event.group_id), `未找到订阅: ${feedId}`);
+        return;
+    }
+
+    await sendGroupMessage(ctx, String(event.group_id), `正在测试订阅: ${feed.name}...`);
+
+    const result = await testFeed(feed);
+
+    if (!result.success) {
+        await sendGroupMessage(
+            ctx, 
+            String(event.group_id), 
+            `测试失败: ${feed.name}\n错误: ${result.error}`
+        );
+        return;
+    }
+
+    if (result.items.length === 0) {
+        await sendGroupMessage(ctx, String(event.group_id), `测试成功，但该订阅暂无内容`);
+        return;
+    }
+
+    if (feed.sendMode === 'forward') {
+        await sendForward(ctx, String(event.group_id), result.items.slice(0, 3));
+    } else {
+        for (const item of result.items.slice(0, 3)) {
+            if (feed.sendMode === 'single') {
+                const { sendSingle } = await import('../services/message/text');
+                await sendSingle(feed, String(event.group_id), item);
+            }
+        }
+    }
+
+    await sendGroupMessage(
+        ctx, 
+        String(event.group_id), 
+        `测试成功，推送 ${Math.min(3, result.items.length)} 条内容`
+    );
+}
+
+async function handleEnable(
+    ctx: NapCatPluginContext,
+    event: OB11Message,
+    args: string[],
+    enabled: boolean
+): Promise<void> {
+    if (args.length < 1) {
+        await sendGroupMessage(
+            ctx, 
+            String(event.group_id), 
+            `用法: #rss ${enabled ? 'enable' : 'disable'} <id>`
+        );
+        return;
+    }
+
+    const feedId = args[0];
+    const feed = storage.getFeed(feedId);
+
+    if (!feed) {
+        await sendGroupMessage(ctx, String(event.group_id), `未找到订阅: ${feedId}`);
+        return;
+    }
+
+    storage.updateFeed(feedId, { enabled });
+
+    if (enabled) {
+        feedScheduler.startFeed({ ...feed, enabled: true });
+    } else {
+        feedScheduler.stopFeed(feedId);
+    }
+
+    await sendGroupMessage(
+        ctx, 
+        String(event.group_id), 
+        `已${enabled ? '启用' : '禁用'}订阅: ${feed.name}`
+    );
+}
+
+async function handleCheck(
+    ctx: NapCatPluginContext,
+    event: OB11Message,
+    args: string[]
+): Promise<void> {
+    if (args.length < 1) {
+        await sendGroupMessage(ctx, String(event.group_id), '用法: #rss check <id>');
+        return;
+    }
+
+    const feedId = args[0];
+    const feed = storage.getFeed(feedId);
+
+    if (!feed) {
+        await sendGroupMessage(ctx, String(event.group_id), `未找到订阅: ${feedId}`);
+        return;
+    }
+
+    await sendGroupMessage(ctx, String(event.group_id), `正在检查: ${feed.name}...`);
+
+    const items = await feedScheduler.checkUpdate(feedId);
+
+    if (items.length === 0) {
+        await sendGroupMessage(ctx, String(event.group_id), `${feed.name} 暂无更新`);
+    } else {
+        await sendGroupMessage(
+            ctx, 
+            String(event.group_id), 
+            `${feed.name} 发现 ${items.length} 条更新并已推送`
+        );
+    }
+}
+
+async function handleStatus(
+    ctx: NapCatPluginContext,
+    event: OB11Message
+): Promise<void> {
+    const feeds = Object.values(storage.getAllFeeds());
+    const enabled = feeds.filter((f) => f.enabled).length;
+    const activeTimers = feedScheduler.getActiveTimers().length;
+
+    const statusText = [
+        '【RSS 订阅状态】',
+        `订阅总数: ${feeds.length}`,
+        `启用中: ${enabled}`,
+        `运行任务: ${activeTimers}`,
+    ].join('\n');
+
+    await sendGroupMessage(ctx, String(event.group_id), statusText);
 }

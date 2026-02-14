@@ -71,15 +71,15 @@ export default function StatusPage({ status, onRefresh }: StatusPageProps) {
             bg: 'bg-primary/10',
         },
         {
-            label: '今日处理',
-            value: String(stats.todayProcessed),
+            label: '订阅总数',
+            value: String(Object.keys(config.feeds || {}).length),
             icon: <IconActivity size={18} />,
             color: 'text-amber-500',
             bg: 'bg-amber-500/10',
         },
         {
-            label: '累计处理',
-            value: String(stats.processed),
+            label: '今日推送',
+            value: String(stats.todayProcessed),
             icon: <IconDownload size={18} />,
             color: 'text-violet-500',
             bg: 'bg-violet-500/10',
@@ -119,6 +119,9 @@ export default function StatusPage({ status, onRefresh }: StatusPageProps) {
                     <InfoRow label="命令前缀" value={config.commandPrefix} />
                     <InfoRow label="冷却时间" value={`${config.cooldownSeconds} 秒`} />
                     <InfoRow label="调试模式" value={config.debug ? '开启' : '关闭'} />
+                    <InfoRow label="默认发送方式" value={{ single: '单条消息', forward: '合并转发', puppeteer: '图片渲染' }[config.defaultSendMode] || '合并转发'} />
+                    <InfoRow label="默认轮询间隔" value={`${config.defaultUpdateInterval} 分钟`} />
+                    <InfoRow label="Puppeteer 地址" value={config.puppeteerEndpoint} />
                 </div>
             </div>
         </div>

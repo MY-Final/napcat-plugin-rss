@@ -4,48 +4,59 @@
  */
 
 import type { NapCatPluginContext, PluginConfigSchema } from 'napcat-types/napcat-onebot/network/plugin/types';
-import type { PluginConfig } from './types';
+import type { PluginConfig, SendMode } from './types';
 
-/** 默认配置 */
 export const DEFAULT_CONFIG: PluginConfig = {
     enabled: true,
     debug: false,
-    commandPrefix: '#cmd',
+    commandPrefix: '#rss',
     cooldownSeconds: 60,
     groupConfigs: {},
-    // TODO: 在这里添加你的默认配置值
+    feeds: {},
+    defaultSendMode: 'forward',
+    defaultUpdateInterval: 30,
+    puppeteerEndpoint: 'http://127.0.0.1:3000',
 };
 
-/**
- * 构建 WebUI 配置 Schema
- *
- * 使用 ctx.NapCatConfig 提供的构建器方法生成配置界面：
- *   - boolean(key, label, defaultValue?, description?, reactive?)  → 开关
- *   - text(key, label, defaultValue?, description?, reactive?)     → 文本输入
- *   - number(key, label, defaultValue?, description?, reactive?)   → 数字输入
- *   - select(key, label, options, defaultValue?, description?)     → 下拉单选
- *   - multiSelect(key, label, options, defaultValue?, description?) → 下拉多选
- *   - html(content)     → 自定义 HTML 展示（不保存值）
- *   - plainText(content) → 纯文本说明
- *   - combine(...items)  → 组合多个配置项为 Schema
- */
 export function buildConfigSchema(ctx: NapCatPluginContext): PluginConfigSchema {
     return ctx.NapCatConfig.combine(
-        // 插件信息头部
         ctx.NapCatConfig.html(`
-            <div style="padding: 16px; background: #FB7299; border-radius: 12px; margin-bottom: 20px; color: white;">
-                <h3 style="margin: 0 0 6px 0; font-size: 18px; font-weight: 600;">插件模板</h3>
-                <p style="margin: 0; font-size: 13px; opacity: 0.85;">NapCat 插件开发模板，请根据需要修改配置</p>
+            <div style="padding: 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; margin-bottom: 20px; color: white;">
+                <h3 style="margin: 0 0 6px 0; font-size: 18px; font-weight: 600;">RSS 订阅推送</h3>
+                <p style="margin: 0; font-size: 13px; opacity: 0.85;">定时检测 RSS 更新并推送到群，支持多种发送模式</p>
             </div>
         `),
-        // 全局开关
         ctx.NapCatConfig.boolean('enabled', '启用插件', true, '是否启用此插件的功能'),
-        // 调试模式
         ctx.NapCatConfig.boolean('debug', '调试模式', false, '启用后将输出详细的调试日志'),
-        // 命令前缀
-        ctx.NapCatConfig.text('commandPrefix', '命令前缀', '#cmd', '触发命令的前缀，默认为 #cmd'),
-        // 冷却时间
-        ctx.NapCatConfig.number('cooldownSeconds', '冷却时间（秒）', 60, '同一命令请求冷却时间，0 表示不限制')
-        // TODO: 在这里添加你的配置项
+        ctx.NapCatConfig.text('commandPrefix', '命令前缀', '#rss', '触发命令的前缀，默认为 #rss'),
+        ctx.NapCatConfig.number('cooldownSeconds', '冷却时间（秒）', 60, '同一命令请求冷却时间，0 表示不限制'),
+        
+        ctx.NapCatConfig.html('<h4 style="margin: 20px 0 10px 0; font-size: 14px; color: #666;">RSS 推送设置</h4>'),
+        
+        ctx.NapCatConfig.select(
+            'defaultSendMode', 
+            '默认发送方式', 
+            [
+                { label: '合并转发', value: 'forward' },
+                { label: '单条消息', value: 'single' },
+                { label: 'Puppeteer 图片', value: 'puppeteer' },
+            ],
+            'forward',
+            '新订阅默认使用的发送方式'
+        ),
+        
+        ctx.NapCatConfig.number(
+            'defaultUpdateInterval', 
+            '默认轮询间隔（分钟）', 
+            30, 
+            'RSS 源更新检测间隔，范围 5-1440'
+        ),
+        
+        ctx.NapCatConfig.text(
+            'puppeteerEndpoint', 
+            'Puppeteer 服务地址', 
+            'http://127.0.0.1:3000', 
+            'napcat-plugin-puppeteer 的服务地址'
+        ),
     );
 }

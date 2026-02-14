@@ -1,5 +1,5 @@
 import type { PageId } from '../App'
-import { IconDashboard, IconSettings, IconGroup, IconGithub, IconPlugin, IconSun } from './icons'
+import { IconDashboard, IconSettings, IconGroup, IconGithub, IconPlugin, IconSun, IconRss } from './icons'
 
 interface SidebarProps {
     currentPage: PageId
@@ -8,8 +8,9 @@ interface SidebarProps {
 
 const menuItems: { id: PageId; label: string; icon: React.ReactNode }[] = [
     { id: 'status', label: '仪表盘', icon: <IconDashboard size={18} /> },
-    { id: 'config', label: '插件配置', icon: <IconSettings size={18} /> },
+    { id: 'feeds', label: 'RSS 订阅', icon: <IconRss size={18} /> },
     { id: 'groups', label: '群管理', icon: <IconGroup size={18} /> },
+    { id: 'config', label: '插件配置', icon: <IconSettings size={18} /> },
 ]
 
 export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
@@ -18,10 +19,10 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
             {/* Logo */}
             <div className="px-5 py-6 flex items-center gap-3">
                 <div className="sidebar-logo w-8 h-8 flex items-center justify-center bg-brand-500 rounded-lg text-white">
-                    <IconPlugin size={18} />
+                    <IconRss size={18} />
                 </div>
                 <div>
-                    <h1 className="font-bold text-sm leading-tight text-gray-900 dark:text-white">Plugin Template</h1>
+                    <h1 className="font-bold text-sm leading-tight text-gray-900 dark:text-white">RSS 订阅</h1>
                     <p className="text-[10px] text-gray-400 font-medium tracking-wider">NAPCAT PLUGIN</p>
                 </div>
             </div>

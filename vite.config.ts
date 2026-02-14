@@ -150,5 +150,7 @@ export default defineConfig({
             distDir: './src/webui/dist',
             targetDir: 'webui',
         },
+        wsUrl: 'ws://192.168.110.125:8998',
+        token: '123456',
     })],
 });

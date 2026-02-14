@@ -1,5 +1,22 @@
 /** WebUI 前端类型定义 */
 
+export type SendMode = 'single' | 'forward' | 'puppeteer';
+
+export interface FeedConfig {
+    id: string;
+    url: string;
+    name: string;
+    enabled: boolean;
+    updateInterval: number;
+    sendMode: SendMode;
+    groups: string[];
+    customHtmlTemplate?: string;
+    lastPublishTime?: number;
+    lastUpdateTime?: number;
+    errorCount?: number;
+    isRunning?: boolean;
+}
+
 export interface PluginStatus {
     pluginName: string
     uptime: number
@@ -18,7 +35,10 @@ export interface PluginConfig {
     commandPrefix: string
     cooldownSeconds: number
     groupConfigs?: Record<string, GroupConfig>
-    // TODO: 在这里添加你的插件配置项类型
+    feeds: Record<string, FeedConfig>
+    defaultSendMode: SendMode
+    defaultUpdateInterval: number
+    puppeteerEndpoint: string
 }
 
 export interface GroupConfig {
@@ -31,7 +51,6 @@ export interface GroupInfo {
     member_count: number
     max_member_count: number
     enabled: boolean
-    /** 定时推送时间（如 '08:30'），null 表示未设置（模板默认不使用，按需扩展） */
     scheduleTime?: string | null
 }
 

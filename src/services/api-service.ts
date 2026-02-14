@@ -1,37 +1,19 @@
 /**
  * API 服务模块
  * 注册 WebUI API 路由
- *
- * 路由类型说明：
- * ┌─────────────────┬──────────────────────────────────────────────┬─────────────────┐
- * │ 类型            │ 路径前缀                                      │ 注册方法        │
- * ├─────────────────┼──────────────────────────────────────────────┼─────────────────┤
- * │ 需要鉴权 API    │ /api/Plugin/ext/<plugin-id>/                 │ router.get/post │
- * │ 无需鉴权 API    │ /plugin/<plugin-id>/api/                     │ router.getNoAuth│
- * │ 静态文件        │ /plugin/<plugin-id>/files/<urlPath>/         │ router.static   │
- * │ 内存文件        │ /plugin/<plugin-id>/mem/<urlPath>/           │ router.staticOnMem│
- * │ 页面            │ /plugin/<plugin-id>/page/<path>             │ router.page     │
- * └─────────────────┴──────────────────────────────────────────────┴─────────────────┘
- *
- * 一般插件自带的 WebUI 页面使用 NoAuth 路由，因为页面本身已在 NapCat WebUI 内嵌展示。
  */
 
-import type {
-    NapCatPluginContext,
-    PluginHttpRequest,
-    PluginHttpResponse
-} from 'napcat-types/napcat-onebot/network/plugin/types';
+import type { NapCatPluginContext } from 'napcat-types/napcat-onebot/network/plugin/types';
 import { pluginState } from '../core/state';
+import * as rss from '../services/rss';
+import * as storage from '../services/rss/storage';
+import { feedScheduler } from '../core/scheduler';
+import type { FeedConfig, SendMode } from '../types';
+import { DEFAULT_TEMPLATE } from './puppeteer/templates';
 
-/**
- * 注册 API 路由
- */
 export function registerApiRoutes(ctx: NapCatPluginContext): void {
     const router = ctx.router;
 
-    // ==================== 插件信息（无鉴权）====================
-
-    /** 获取插件状态 */
     router.getNoAuth('/status', (_req, res) => {
         res.json({
             code: 0,
@@ -45,14 +27,10 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
         });
     });
 
-    // ==================== 配置管理（无鉴权）====================
-
-    /** 获取配置 */
     router.getNoAuth('/config', (_req, res) => {
         res.json({ code: 0, data: pluginState.config });
     });
 
-    /** 保存配置 */
     router.postNoAuth('/config', async (req, res) => {
         try {
             const body = req.body as Record<string, unknown> | undefined;
@@ -68,9 +46,6 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
         }
     });
 
-    // ==================== 群管理（无鉴权）====================
-
-    /** 获取群列表（附带各群启用状态） */
     router.getNoAuth('/groups', async (_req, res) => {
         try {
             const groups = await ctx.actions.call(
@@ -98,7 +73,6 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
         }
     });
 
-    /** 更新单个群配置 */
     router.postNoAuth('/groups/:id/config', async (req, res) => {
         try {
             const groupId = req.params?.id;
@@ -117,7 +91,6 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
         }
     });
 
-    /** 批量更新群配置 */
     router.postNoAuth('/groups/bulk-config', async (req, res) => {
         try {
             const body = req.body as Record<string, unknown> | undefined;
@@ -139,7 +112,196 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
         }
     });
 
-    // TODO: 在这里添加你的自定义 API 路由
+    router.getNoAuth('/feeds', (_req, res) => {
+        const feeds = storage.getAllFeeds();
+        const feedList = Object.values(feeds).map((feed) => ({
+            ...feed,
+            isRunning: feedScheduler.isFeedRunning(feed.id),
+        }));
+        res.json({ code: 0, data: feedList });
+    });
+
+    router.postNoAuth('/feeds', async (req, res) => {
+        try {
+            const body = req.body as Partial<FeedConfig> | undefined;
+            if (!body || !body.url) {
+                return res.status(400).json({ code: -1, message: '缺少 URL 参数' });
+            }
+
+            const feedId = storage.generateFeedId();
+            const feed: FeedConfig = {
+                id: feedId,
+                url: body.url,
+                name: body.name || new URL(body.url).hostname,
+                enabled: body.enabled ?? true,
+                updateInterval: body.updateInterval || pluginState.config.defaultUpdateInterval,
+                sendMode: body.sendMode || pluginState.config.defaultSendMode,
+                groups: body.groups || [],
+                customHtmlTemplate: body.customHtmlTemplate,
+            };
+
+            storage.addFeed(feed);
+
+            if (feed.enabled) {
+                feedScheduler.startFeed(feed);
+            }
+
+            ctx.logger.info(`添加 RSS 订阅: ${feed.name}`);
+            res.json({ code: 0, data: feed });
+        } catch (err) {
+            ctx.logger.error('添加订阅失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.getNoAuth('/feeds/:id', (req, res) => {
+        const feedId = req.params?.id;
+        if (!feedId) {
+            return res.status(400).json({ code: -1, message: '缺少订阅 ID' });
+        }
+
+        const feed = storage.getFeed(feedId);
+        if (!feed) {
+            return res.status(404).json({ code: -1, message: '订阅不存在' });
+        }
+
+        res.json({ code: 0, data: { ...feed, isRunning: feedScheduler.isFeedRunning(feed.id) } });
+    });
+
+    router.putNoAuth('/feeds/:id', async (req, res) => {
+        try {
+            const feedId = req.params?.id;
+            if (!feedId) {
+                return res.status(400).json({ code: -1, message: '缺少订阅 ID' });
+            }
+
+            const body = req.body as Partial<FeedConfig> | undefined;
+            const existingFeed = storage.getFeed(feedId);
+
+            if (!existingFeed) {
+                return res.status(404).json({ code: -1, message: '订阅不存在' });
+            }
+
+            const wasEnabled = existingFeed.enabled;
+            const willBeEnabled = body.enabled ?? wasEnabled;
+
+            storage.updateFeed(feedId, body);
+
+            const updatedFeed = storage.getFeed(feedId);
+            if (!updatedFeed) {
+                return res.status(404).json({ code: -1, message: '订阅不存在' });
+            }
+
+            if (!wasEnabled && willBeEnabled) {
+                feedScheduler.startFeed(updatedFeed);
+            } else if (wasEnabled && !willBeEnabled) {
+                feedScheduler.stopFeed(feedId);
+            } else if (willBeEnabled && (body.updateInterval || body.url)) {
+                feedScheduler.startFeed(updatedFeed);
+            }
+
+            ctx.logger.info(`更新 RSS 订阅: ${updatedFeed.name}`);
+            res.json({ code: 0, data: updatedFeed });
+        } catch (err) {
+            ctx.logger.error('更新订阅失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.deleteNoAuth('/feeds/:id', async (req, res) => {
+        try {
+            const feedId = req.params?.id;
+            if (!feedId) {
+                return res.status(400).json({ code: -1, message: '缺少订阅 ID' });
+            }
+
+            const feed = storage.getFeed(feedId);
+            if (!feed) {
+                return res.status(404).json({ code: -1, message: '订阅不存在' });
+            }
+
+            feedScheduler.stopFeed(feedId);
+            storage.deleteFeed(feedId);
+
+            ctx.logger.info(`删除 RSS 订阅: ${feed.name}`);
+            res.json({ code: 0, message: 'ok' });
+        } catch (err) {
+            ctx.logger.error('删除订阅失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.postNoAuth('/feeds/:id/check', async (req, res) => {
+        try {
+            const feedId = req.params?.id;
+            if (!feedId) {
+                return res.status(400).json({ code: -1, message: '缺少订阅 ID' });
+            }
+
+            const feed = storage.getFeed(feedId);
+            if (!feed) {
+                return res.status(404).json({ code: -1, message: '订阅不存在' });
+            }
+
+            const items = await feedScheduler.checkUpdate(feedId);
+            res.json({ code: 0, data: { count: items.length, items } });
+        } catch (err) {
+            ctx.logger.error('检查更新失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.postNoAuth('/feeds/:id/test', async (req, res) => {
+        try {
+            const feedId = req.params?.id;
+            if (!feedId) {
+                return res.status(400).json({ code: -1, message: '缺少订阅 ID' });
+            }
+
+            const feed = storage.getFeed(feedId);
+            if (!feed) {
+                return res.status(404).json({ code: -1, message: '订阅不存在' });
+            }
+
+            const result = await rss.testFeed(feed);
+            res.json({ code: 0, data: result });
+        } catch (err) {
+            ctx.logger.error('测试订阅失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.getNoAuth('/template/default', (_req, res) => {
+        res.json({ code: 0, data: DEFAULT_TEMPLATE });
+    });
+
+    router.getNoAuth('/template/preview', (req, res) => {
+        const html = req.query?.html as string;
+        const vars = req.query?.vars as string;
+
+        if (!html) {
+            return res.status(400).json({ code: -1, message: '缺少 HTML 参数' });
+        }
+
+        try {
+            const variables = vars ? JSON.parse(vars) : {};
+            const { applyTemplate } = require('./puppeteer/templates');
+            const rendered = applyTemplate(
+                { name: variables.feedName || '测试', customHtmlTemplate: html } as FeedConfig,
+                {
+                    title: variables.title || '测试标题',
+                    link: variables.link || 'https://example.com',
+                    description: variables.description || '这是一条测试描述内容',
+                    pubDate: Date.now(),
+                    author: variables.author || '测试作者',
+                    image: variables.image || '',
+                }
+            );
+            res.json({ code: 0, data: rendered });
+        } catch (err) {
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
 
     ctx.logger.debug('API 路由注册完成');
 }
