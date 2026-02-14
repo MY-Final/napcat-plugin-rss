@@ -95,6 +95,10 @@ export async function handleMessage(ctx: NapCatPluginContext, event: OB11Message
             case 'status':
                 await handleStatus(ctx, event);
                 break;
+            case 'category':
+            case 'cat':
+                await handleCategory(ctx, event, args.slice(1));
+                break;
         }
     } catch (error) {
         pluginState.logger.error('处理消息时出错:', error);
@@ -114,6 +118,10 @@ async function sendHelp(ctx: NapCatPluginContext, event: OB11Message): Promise<v
         `${prefix} disable <id> - 禁用订阅`,
         `${prefix} check <id> - 手动检查更新`,
         `${prefix} status - 查看状态`,
+        `${prefix} cat add <name> - 添加分类`,
+        `${prefix} cat del <id> - 删除分类`,
+        `${prefix} cat list - 查看分类`,
+        `${prefix} cat set <feedId> <catId> - 设置订阅分类`,
     ].join('\n');
 
     const target = event.message_type === 'group' && event.group_id 
@@ -406,4 +414,95 @@ async function handleStatus(
     ].join('\n');
 
     await sendGroupMessage(ctx, String(event.group_id), statusText);
+}
+
+async function handleCategory(
+    ctx: NapCatPluginContext,
+    event: OB11Message,
+    args: string[]
+): Promise<void> {
+    const action = args[0]?.toLowerCase();
+    const categories = pluginState.config.categories || {};
+
+    switch (action) {
+        case 'add':
+            if (args.length < 2) {
+                await sendGroupMessage(ctx, String(event.group_id), '用法: #rss cat add <名称>');
+                return;
+            }
+            const catName = args.slice(1).join(' ');
+            const catId = 'cat_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+            pluginState.updateConfig({
+                categories: {
+                    ...categories,
+                    [catId]: { id: catId, name: catName, createdAt: Date.now() }
+                }
+            });
+            await sendGroupMessage(ctx, String(event.group_id), `已添加分类: ${catName}`);
+            break;
+
+        case 'del':
+        case 'delete':
+            if (args.length < 2) {
+                await sendGroupMessage(ctx, String(event.group_id), '用法: #rss cat del <分类ID>');
+                return;
+            }
+            const delCatId = args[1];
+            if (!categories[delCatId]) {
+                await sendGroupMessage(ctx, String(event.group_id), `未找到分类: ${delCatId}`);
+                return;
+            }
+            const feeds = storage.getAllFeeds();
+            for (const feed of Object.values(feeds)) {
+                if (feed.categoryId === delCatId) {
+                    storage.updateFeed(feed.id, { categoryId: undefined });
+                }
+            }
+            const newCategories = { ...categories };
+            delete newCategories[delCatId];
+            pluginState.updateConfig({ categories: newCategories });
+            await sendGroupMessage(ctx, String(event.group_id), `已删除分类: ${categories[delCatId].name}`);
+            break;
+
+        case 'list':
+        case 'ls':
+            const catList = Object.values(categories);
+            if (catList.length === 0) {
+                await sendGroupMessage(ctx, String(event.group_id), '暂无分类');
+                return;
+            }
+            const allFeeds = storage.getAllFeeds();
+            const catLines = ['【分类列表】'];
+            for (const cat of catList) {
+                const feedCount = Object.values(allFeeds).filter(f => f.categoryId === cat.id).length;
+                catLines.push(`• ${cat.name} (${cat.id}) - ${feedCount}个订阅`);
+            }
+            await sendGroupMessage(ctx, String(event.group_id), catLines.join('\n'));
+            break;
+
+        case 'set':
+            if (args.length < 3) {
+                await sendGroupMessage(ctx, String(event.group_id), '用法: #rss cat set <订阅ID> <分类ID>');
+                return;
+            }
+            const targetFeedId = args[1];
+            const targetCatId = args[2];
+            const targetFeed = storage.getFeed(targetFeedId);
+            if (!targetFeed) {
+                await sendGroupMessage(ctx, String(event.group_id), `未找到订阅: ${targetFeedId}`);
+                return;
+            }
+            if (targetCatId !== 'none' && !categories[targetCatId]) {
+                await sendGroupMessage(ctx, String(event.group_id), `未找到分类: ${targetCatId}`);
+                return;
+            }
+            storage.updateFeed(targetFeedId, { categoryId: targetCatId === 'none' ? undefined : targetCatId });
+            const catNameStr = targetCatId === 'none' ? '未分类' : categories[targetCatId].name;
+            await sendGroupMessage(ctx, String(event.group_id), `已将 ${targetFeed.name} 设置为: ${catNameStr}`);
+            break;
+
+        default:
+            await sendGroupMessage(ctx, String(event.group_id), 
+                '用法: #rss cat <add|del|list|set>\n  add <名称> - 添加分类\n  del <ID> - 删除分类\n  list - 查看分类\n  set <订阅ID> <分类ID|none> - 设置订阅分类');
+    }
 }

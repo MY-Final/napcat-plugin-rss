@@ -14,6 +14,7 @@ export interface FeedConfig {
     id: string;
     url: string;
     name: string;
+    categoryId?: string;
     enabled: boolean;
     updateInterval: number;
     sendMode: SendMode;
@@ -22,6 +23,13 @@ export interface FeedConfig {
     lastPublishTime?: number;
     lastUpdateTime?: number;
     errorCount?: number;
+}
+
+export interface Category {
+    id: string;
+    name: string;
+    color?: string;
+    createdAt: number;
 }
 
 export interface FeedItem {
@@ -48,6 +56,7 @@ export interface PluginConfig {
     cooldownSeconds: number;
     groupConfigs: Record<string, GroupConfig>;
     feeds: Record<string, FeedConfig>;
+    categories: Record<string, Category>;
     defaultSendMode: SendMode;
     defaultUpdateInterval: number;
     puppeteerEndpoint: string;

@@ -13,6 +13,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
     cooldownSeconds: 60,
     groupConfigs: {},
     feeds: {},
+    categories: {},
     defaultSendMode: 'forward',
     defaultUpdateInterval: 30,
     puppeteerEndpoint: 'http://127.0.0.1:6099',

@@ -1,5 +1,5 @@
 import { resolve, dirname } from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import { builtinModules } from 'module';
 import { fileURLToPath } from 'url';
@@ -124,33 +124,36 @@ function copyAssetsPlugin() {
     };
 }
 
-export default defineConfig({
-    resolve: {
-        conditions: ['node', 'default'],
-    },
-    build: {
-        sourcemap: false,
-        target: 'esnext',
-        minify: false,
-        lib: {
-            entry: resolve(__dirname, 'src/index.ts'),
-            formats: ['es'],
-            fileName: () => 'index.mjs',
+export default defineConfig(({ mode }) => {
+    const env = loadEnv(mode, __dirname, '');
+    return {
+        resolve: {
+            conditions: ['node', 'default'],
         },
-        rollupOptions: {
-            external: [...nodeModules, ...external],
-            output: {
-                inlineDynamicImports: true,
+        build: {
+            sourcemap: false,
+            target: 'esnext',
+            minify: false,
+            lib: {
+                entry: resolve(__dirname, 'src/index.ts'),
+                formats: ['es'],
+                fileName: () => 'index.mjs',
             },
+            rollupOptions: {
+                external: [...nodeModules, ...external],
+                output: {
+                    inlineDynamicImports: true,
+                },
+            },
+            outDir: 'dist',
         },
-        outDir: 'dist',
-    },
-    plugins: [nodeResolve(), copyAssetsPlugin(), napcatHmrPlugin({
-        webui: {
-            distDir: './src/webui/dist',
-            targetDir: 'webui',
-        },
-        wsUrl: 'ws://192.168.110.125:8998',
-        token: '123456',
-    })],
+        plugins: [nodeResolve(), copyAssetsPlugin(), napcatHmrPlugin({
+            webui: {
+                distDir: './src/webui/dist',
+                targetDir: 'webui',
+            },
+            wsUrl: env.WS_URL,
+            token: env.TOKEN,
+        })],
+    };
 });

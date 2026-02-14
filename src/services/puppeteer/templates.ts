@@ -6,105 +6,224 @@
 import type { TemplateVariables, FeedItem, FeedConfig } from '../../types';
 
 export const DEFAULT_TEMPLATE = `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{title}}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700&family=Plus+Jakarta+Sans:wght@300;400;600&display=swap');
+
+        :root {
+            --accent: #000000;
+            --bg: #ffffff;
+            --text-main: #1a1a1a;
+            --text-muted: #666666;
         }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+            background-color: #f8f8f8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             min-height: 100vh;
-            padding: 20px;
-        }
-        .card {
-            max-width: 600px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-        }
-        .cover {
-            width: 100%;
-            height: 200px;
-            object-fit: cover;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        }
-        .content {
+            margin: 0;
             padding: 24px;
         }
-        .feed-name {
-            font-size: 12px;
-            color: #667eea;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
+
+        .magazine-card {
+            width: 100%;
+            max-width: 640px;
+            background: var(--bg);
+            padding: 40px;
+            position: relative;
+            box-shadow: 0 30px 60px -12px rgba(0,0,0,0.08);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            text-decoration: none;
+            color: var(--text-main);
+            border: 1px solid rgba(0,0,0,0.03);
         }
-        .title {
-            font-size: 20px;
-            font-weight: 700;
-            color: #1a1a2e;
-            line-height: 1.4;
-            margin-bottom: 12px;
+
+        .magazine-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 40px 80px -15px rgba(0,0,0,0.12);
         }
-        .description {
-            font-size: 14px;
-            color: #666;
-            line-height: 1.6;
-            margin-bottom: 16px;
+
+        /* 顶部装饰线 */
+        .magazine-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--accent);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .meta {
+
+        .magazine-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .header-meta {
             display: flex;
             justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 32px;
+            border-bottom: 1px solid #f0f0f0;
+            padding-bottom: 12px;
+        }
+
+        .feed-source {
+            font-weight: 700;
+            font-size: 13px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        .pub-date {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 32px;
+        }
+
+        @media (min-width: 500px) {
+            .main-layout.has-image {
+                grid-template-columns: 1fr 180px;
+            }
+        }
+
+        .title {
+            font-family: 'Plus Jakarta Sans', 'Noto Serif SC', serif;
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+            transition: color 0.3s ease;
+        }
+
+        .magazine-card:hover .title {
+            color: #444;
+        }
+
+        .summary {
+            font-size: 15px;
+            line-height: 1.7;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+        }
+
+        .image-wrapper {
+            width: 100%;
+            height: 180px;
+            background: #f0f0f0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .image-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: grayscale(20%);
+            transition: all 0.6s ease;
+        }
+
+        .magazine-card:hover .image-wrapper img {
+            filter: grayscale(0%);
+            transform: scale(1.08);
+        }
+
+        .footer-info {
+            display: flex;
             align-items: center;
-            padding-top: 16px;
-            border-top: 1px solid #eee;
+            gap: 12px;
+            margin-top: 8px;
         }
-        .author {
+
+        .author-tag {
+            font-size: 13px;
+            font-weight: 600;
+            padding-right: 12px;
+            border-right: 1px solid #ddd;
+        }
+
+        .read-time {
             font-size: 12px;
-            color: #999;
+            color: var(--text-muted);
+            font-style: italic;
         }
-        .date {
-            font-size: 12px;
-            color: #999;
+
+        .arrow-link {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #eee;
+            border-radius: 50%;
+            transition: all 0.3s ease;
         }
-        .link-hint {
-            font-size: 11px;
-            color: #667eea;
-            text-align: center;
-            padding: 12px;
-            background: #f8f9ff;
+
+        .magazine-card:hover .arrow-link {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+            transform: rotate(-45deg);
         }
     </style>
 </head>
 <body>
-    <div class="card">
-        {{#if image}}
-        <img class="cover" src="{{image}}" alt="cover" onerror="this.style.display='none'">
-        {{/if}}
-        <div class="content">
-            <div class="feed-name">{{feedName}}</div>
-            <div class="title">{{title}}</div>
-            {{#if description}}
-            <div class="description">{{description}}</div>
-            {{/if}}
-            <div class="meta">
-                {{#if author}}
-                <span class="author">{{author}}</span>
-                {{/if}}
-                <span class="date">{{pubDate}}</span>
-            </div>
+
+    <a href="{{link}}" class="magazine-card">
+        <div class="header-meta">
+            <span class="feed-source">{{feedName}}</span>
+            <span class="pub-date">{{pubDate}}</span>
         </div>
-        <div class="link-hint">点击查看全文: {{link}}</div>
-    </div>
+
+        <div class="main-layout {{#if image}}has-image{{/if}}">
+            <div class="text-content">
+                <h1 class="title">{{title}}</h1>
+                {{#if description}}
+                <p class="summary">{{description}}</p>
+                {{/if}}
+                
+                <div class="footer-info">
+                    {{#if author}}
+                    <span class="author-tag">{{author}}</span>
+                    {{/if}}
+                    <span class="read-time">Featured Content</span>
+                </div>
+            </div>
+
+            {{#if image}}
+            <div class="image-wrapper">
+                <img src="{{image}}" alt="article cover" onerror="this.parentElement.style.display='none'">
+            </div>
+            {{/if}}
+        </div>
+
+        <div class="arrow-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </div>
+    </a>
+
 </body>
 </html>`;
 

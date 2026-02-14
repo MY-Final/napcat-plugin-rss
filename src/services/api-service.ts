@@ -8,13 +8,33 @@ import { pluginState } from '../core/state';
 import * as rss from '../services/rss';
 import * as storage from '../services/rss/storage';
 import { feedScheduler } from '../core/scheduler';
-import type { FeedConfig, SendMode } from '../types';
+import type { FeedConfig, SendMode, Category } from '../types';
 import { DEFAULT_TEMPLATE } from './puppeteer/templates';
+import { puppeteerClient } from './puppeteer/client';
+
+function generateCategoryId(): string {
+    return 'cat_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
 
 export function registerApiRoutes(ctx: NapCatPluginContext): void {
     const router = ctx.router;
 
-    router.getNoAuth('/status', (_req, res) => {
+    router.getNoAuth('/status', async (_req, res) => {
+        const feeds = storage.getAllFeeds();
+        const feedList = Object.values(feeds);
+        const enabledFeeds = feedList.filter(f => f.enabled).length;
+        const runningFeeds = feedList.filter(f => feedScheduler.isFeedRunning(f.id)).length;
+        
+        let puppeteerStatus = 'disconnected';
+        let puppeteerError = '';
+        try {
+            const connected = await puppeteerClient.checkStatus();
+            puppeteerStatus = connected ? 'connected' : 'disconnected';
+        } catch (e: any) {
+            puppeteerStatus = 'error';
+            puppeteerError = e.message || '连接失败';
+        }
+
         res.json({
             code: 0,
             data: {
@@ -23,6 +43,16 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
                 uptimeFormatted: pluginState.getUptimeFormatted(),
                 config: pluginState.config,
                 stats: pluginState.stats,
+                feeds: {
+                    total: feedList.length,
+                    enabled: enabledFeeds,
+                    running: runningFeeds,
+                },
+                puppeteer: {
+                    status: puppeteerStatus,
+                    error: puppeteerError,
+                    endpoint: pluginState.config.puppeteerEndpoint,
+                },
             },
         });
     });
@@ -112,6 +142,111 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
         }
     });
 
+    router.getNoAuth('/categories', (_req, res) => {
+        const categories = pluginState.config.categories || {};
+        const categoryList = Object.values(categories).map(cat => ({
+            ...cat,
+            feedCount: Object.values(storage.getAllFeeds()).filter(f => f.categoryId === cat.id).length
+        }));
+        res.json({ code: 0, data: categoryList });
+    });
+
+    router.postNoAuth('/categories', async (req, res) => {
+        try {
+            const body = req.body as Partial<Category> | undefined;
+            if (!body || !body.name) {
+                return res.status(400).json({ code: -1, message: '缺少分类名称' });
+            }
+
+            const categoryId = generateCategoryId();
+            const category: Category = {
+                id: categoryId,
+                name: body.name,
+                color: body.color || '#667eea',
+                createdAt: Date.now(),
+            };
+
+            pluginState.updateConfig({
+                categories: {
+                    ...pluginState.config.categories,
+                    [categoryId]: category
+                }
+            });
+
+            ctx.logger.info(`添加分类: ${category.name}`);
+            res.json({ code: 0, data: category });
+        } catch (err) {
+            ctx.logger.error('添加分类失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.putNoAuth('/categories/:id', async (req, res) => {
+        try {
+            const categoryId = req.params?.id;
+            if (!categoryId) {
+                return res.status(400).json({ code: -1, message: '缺少分类 ID' });
+            }
+
+            const body = req.body as Partial<Category> | undefined;
+            const existingCategory = pluginState.config.categories?.[categoryId];
+
+            if (!existingCategory) {
+                return res.status(404).json({ code: -1, message: '分类不存在' });
+            }
+
+            const updatedCategory: Category = {
+                ...existingCategory,
+                ...body,
+                id: categoryId,
+            };
+
+            pluginState.updateConfig({
+                categories: {
+                    ...pluginState.config.categories,
+                    [categoryId]: updatedCategory
+                }
+            });
+
+            ctx.logger.info(`更新分类: ${updatedCategory.name}`);
+            res.json({ code: 0, data: updatedCategory });
+        } catch (err) {
+            ctx.logger.error('更新分类失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.deleteNoAuth('/categories/:id', async (req, res) => {
+        try {
+            const categoryId = req.params?.id;
+            if (!categoryId) {
+                return res.status(400).json({ code: -1, message: '缺少分类 ID' });
+            }
+
+            const existingCategory = pluginState.config.categories?.[categoryId];
+            if (!existingCategory) {
+                return res.status(404).json({ code: -1, message: '分类不存在' });
+            }
+
+            const feeds = storage.getAllFeeds();
+            for (const feed of Object.values(feeds)) {
+                if (feed.categoryId === categoryId) {
+                    storage.updateFeed(feed.id, { categoryId: undefined });
+                }
+            }
+
+            const newCategories = { ...pluginState.config.categories };
+            delete newCategories[categoryId];
+            pluginState.updateConfig({ categories: newCategories });
+
+            ctx.logger.info(`删除分类: ${existingCategory.name}`);
+            res.json({ code: 0, message: 'ok' });
+        } catch (err) {
+            ctx.logger.error('删除分类失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
     router.getNoAuth('/feeds', (_req, res) => {
         const feeds = storage.getAllFeeds();
         const feedList = Object.values(feeds).map((feed) => ({
@@ -133,6 +268,7 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
                 id: feedId,
                 url: body.url,
                 name: body.name || new URL(body.url).hostname,
+                categoryId: body.categoryId,
                 enabled: body.enabled ?? true,
                 updateInterval: body.updateInterval || pluginState.config.defaultUpdateInterval,
                 sendMode: body.sendMode || pluginState.config.defaultSendMode,

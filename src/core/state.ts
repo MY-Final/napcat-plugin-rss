@@ -27,9 +27,9 @@ function isObject(v: unknown): v is Record<string, unknown> {
  * 确保从文件读取的配置符合预期类型，防止运行时错误
  */
 function sanitizeConfig(raw: unknown): PluginConfig {
-    if (!isObject(raw)) return { ...DEFAULT_CONFIG, groupConfigs: {}, feeds: {} };
+    if (!isObject(raw)) return { ...DEFAULT_CONFIG, groupConfigs: {}, feeds: {}, categories: {} };
 
-    const out: PluginConfig = { ...DEFAULT_CONFIG, groupConfigs: {}, feeds: {} };
+    const out: PluginConfig = { ...DEFAULT_CONFIG, groupConfigs: {}, feeds: {}, categories: {} };
 
     if (typeof raw.enabled === 'boolean') out.enabled = raw.enabled;
     if (typeof raw.debug === 'boolean') out.debug = raw.debug;
@@ -51,6 +51,10 @@ function sanitizeConfig(raw: unknown): PluginConfig {
 
     if (isObject(raw.feeds)) {
         out.feeds = raw.feeds as Record<string, import('../types').FeedConfig>;
+    }
+
+    if (isObject(raw.categories)) {
+        out.categories = raw.categories as Record<string, import('../types').Category>;
     }
 
     return out;

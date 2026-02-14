@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import type { FeedConfig, SendMode, GroupInfo } from '../types'
+import type { FeedConfig, SendMode, GroupInfo, Category } from '../types'
 import { noAuthFetch } from '../utils/api'
 import { showToast } from '../hooks/useToast'
 
@@ -11,6 +11,7 @@ interface FeedsPageProps {
 export default function FeedsPage({ onRefresh }: FeedsPageProps) {
     const [feeds, setFeeds] = useState<FeedConfig[]>([])
     const [groups, setGroups] = useState<GroupInfo[]>([])
+    const [categories, setCategories] = useState<Category[]>([])
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [showDetail, setShowDetail] = useState(false)
@@ -40,8 +41,19 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
         }
     }
 
+    const fetchCategories = async () => {
+        try {
+            const res = await noAuthFetch<Category[]>('/categories')
+            if (res.code === 0) {
+                setCategories(res.data || [])
+            }
+        } catch (e) {
+            console.error(e)
+        }
+    }
+
     useEffect(() => {
-        Promise.all([fetchFeeds(), fetchGroups()]).finally(() => setLoading(false))
+        Promise.all([fetchFeeds(), fetchGroups(), fetchCategories()]).finally(() => setLoading(false))
     }, [])
 
     const handleAdd = () => {
@@ -273,6 +285,7 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
                 <FeedDetailModal
                     feed={detailFeed}
                     groups={groups}
+                    categories={categories}
                     onClose={() => setShowDetail(false)}
                     onEdit={() => handleEdit(detailFeed)}
                 />
@@ -282,6 +295,7 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
                 <FeedModal
                     feed={editingFeed}
                     groups={groups}
+                    categories={categories}
                     onSave={handleSave}
                     onClose={() => setShowModal(false)}
                 />
@@ -302,11 +316,13 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
 function FeedDetailModal({
     feed,
     groups,
+    categories,
     onClose,
     onEdit,
 }: {
     feed: FeedConfig
     groups: GroupInfo[]
+    categories: Category[]
     onClose: () => void
     onEdit: () => void
 }) {
@@ -317,6 +333,7 @@ function FeedDetailModal({
     }
 
     const feedGroups = groups.filter((g) => feed.groups.includes(String(g.group_id)))
+    const feedCategory = categories.find(c => c.id === feed.categoryId)
 
     return createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={onClose}>
@@ -345,6 +362,19 @@ function FeedDetailModal({
                         <label className="text-xs text-gray-400 uppercase font-medium">RSS 地址</label>
                         <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 break-all">{feed.url}</p>
                     </div>
+
+                    {feedCategory && (
+                        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
+                            <label className="text-xs text-gray-400 uppercase font-medium">分类</label>
+                            <div className="mt-2 flex items-center gap-2">
+                                <span
+                                    className="w-3 h-3 rounded-full"
+                                    style={{ backgroundColor: feedCategory.color || '#667eea' }}
+                                />
+                                <span className="text-sm text-gray-700 dark:text-gray-300">{feedCategory.name}</span>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
@@ -408,20 +438,24 @@ function FeedDetailModal({
 function FeedModal({
     feed,
     groups,
+    categories,
     onSave,
     onClose,
 }: {
     feed: FeedConfig | null
     groups: GroupInfo[]
+    categories: Category[]
     onSave: (data: Partial<FeedConfig>) => void
     onClose: () => void
 }) {
     const [url, setUrl] = useState(feed?.url || '')
     const [name, setName] = useState(feed?.name || '')
+    const [categoryId, setCategoryId] = useState(feed?.categoryId || '')
     const [enabled, setEnabled] = useState(feed?.enabled ?? true)
     const [updateInterval, setUpdateInterval] = useState(feed?.updateInterval || 30)
     const [sendMode, setSendMode] = useState<SendMode>(feed?.sendMode || 'forward')
     const [selectedGroups, setSelectedGroups] = useState<string[]>(feed?.groups || [])
+    const [groupSearch, setGroupSearch] = useState('')
     const [customHtml, setCustomHtml] = useState(feed?.customHtmlTemplate || '')
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
@@ -434,6 +468,7 @@ function FeedModal({
         onSave({
             url,
             name: name || autoName,
+            categoryId: categoryId || undefined,
             enabled,
             updateInterval,
             sendMode,
@@ -548,6 +583,24 @@ function FeedModal({
                         />
                     </div>
 
+                    {categories.length > 0 && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">分类</label>
+                            <select
+                                value={categoryId}
+                                onChange={(e) => setCategoryId(e.target.value)}
+                                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                            >
+                                <option value="">未分类</option>
+                                {categories.map((cat) => (
+                                    <option key={cat.id} value={cat.id}>
+                                        {cat.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-3 gap-2">
                         <button
                             type="button"
@@ -586,30 +639,60 @@ function FeedModal({
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">轮询间隔</label>
-                        <div className="flex items-center gap-3">
-                            <input
-                                type="range"
-                                value={updateInterval}
-                                onChange={(e) => setUpdateInterval(Number(e.target.value))}
-                                min={1}
-                                max={120}
-                                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            />
-                            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-1.5 min-w-[80px]">
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-1.5">
                                 <input
                                     type="number"
-                                    value={updateInterval}
-                                    onChange={(e) => setUpdateInterval(Number(e.target.value))}
-                                    className="w-12 bg-transparent text-center text-sm font-medium outline-none"
+                                    value={updateInterval >= 60 ? Math.round(updateInterval / 60) : updateInterval}
+                                    onChange={(e) => {
+                                        const num = Number(e.target.value) || 1
+                                        const isMinute = updateInterval >= 60 && updateInterval % 60 === 0
+                                        if (isMinute) {
+                                            setUpdateInterval(num * 60)
+                                        } else {
+                                            setUpdateInterval(num)
+                                        }
+                                    }}
+                                    className="w-16 bg-transparent text-center text-sm font-medium outline-none"
                                     min={1}
                                     max={1440}
                                 />
-                                <span className="text-gray-400 text-xs">分钟</span>
+                                <select
+                                    value={updateInterval >= 60 && updateInterval % 60 === 0 ? 'minute' : 'second'}
+                                    onChange={(e) => {
+                                        const currentVal = updateInterval >= 60 
+                                            ? Math.round(updateInterval / 60) 
+                                            : updateInterval
+                                        if (e.target.value === 'second') {
+                                            setUpdateInterval(currentVal)
+                                        } else {
+                                            setUpdateInterval(currentVal * 60)
+                                        }
+                                    }}
+                                    className="bg-transparent text-xs text-gray-400 outline-none"
+                                >
+                                    <option value="second">秒</option>
+                                    <option value="minute">分钟</option>
+                                </select>
                             </div>
-                        </div>
-                        <div className="flex justify-between text-xs text-gray-400 mt-1">
-                            <span>1分钟</span>
-                            <span>120分钟</span>
+                            <div className="flex items-center gap-1 text-xs text-gray-400">
+                                <input
+                                    type="range"
+                                    value={updateInterval >= 60 ? Math.round(updateInterval / 60) : updateInterval}
+                                    onChange={(e) => {
+                                        const val = Number(e.target.value)
+                                        const isMinute = updateInterval >= 60 && updateInterval % 60 === 0
+                                        if (isMinute) {
+                                            setUpdateInterval(val * 60)
+                                        } else {
+                                            setUpdateInterval(val)
+                                        }
+                                    }}
+                                    min={1}
+                                    max={120}
+                                    className="w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -621,29 +704,45 @@ function FeedModal({
                                 <button type="button" onClick={clearAllGroups} className="text-xs text-gray-400 hover:text-gray-500">清空</button>
                             </div>
                         </div>
+                        {groups.length > 5 && (
+                            <div className="relative mb-2">
+                                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    type="text"
+                                    value={groupSearch}
+                                    onChange={(e) => setGroupSearch(e.target.value)}
+                                    placeholder="搜索群组..."
+                                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                />
+                            </div>
+                        )}
                         <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-xl p-3 space-y-2">
                             {groups.length === 0 ? (
                                 <div className="text-sm text-gray-400 text-center py-4">暂无群组</div>
                             ) : (
-                                groups.map((g) => (
-                                    <label 
-                                        key={g.group_id} 
-                                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
-                                            selectedGroups.includes(String(g.group_id)) 
-                                                ? 'bg-purple-50 dark:bg-purple-900/20' 
-                                                : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'
-                                        }`}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedGroups.includes(String(g.group_id))}
-                                            onChange={() => toggleGroup(String(g.group_id))}
-                                            className="w-4 h-4 text-purple-500 rounded focus:ring-purple-500"
-                                        />
-                                        <span className="text-sm text-gray-700 dark:text-gray-300">{g.group_name}</span>
-                                        <span className="text-xs text-gray-400 ml-auto">{g.member_count} 人</span>
-                                    </label>
-                                ))
+                                groups
+                                    .filter(g => !groupSearch || g.group_name.includes(groupSearch) || String(g.group_id).includes(groupSearch))
+                                    .map((g) => (
+                                        <label 
+                                            key={g.group_id} 
+                                            className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                                                selectedGroups.includes(String(g.group_id)) 
+                                                    ? 'bg-purple-50 dark:bg-purple-900/20' 
+                                                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'
+                                            }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedGroups.includes(String(g.group_id))}
+                                                onChange={() => toggleGroup(String(g.group_id))}
+                                                className="w-4 h-4 text-purple-500 rounded focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">{g.group_name}</span>
+                                            <span className="text-xs text-gray-400 ml-auto">{g.member_count} 人</span>
+                                        </label>
+                                    ))
                             )}
                         </div>
                     </div>

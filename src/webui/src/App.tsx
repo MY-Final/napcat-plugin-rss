@@ -6,16 +6,20 @@ import StatusPage from './pages/StatusPage'
 import ConfigPage from './pages/ConfigPage'
 import GroupsPage from './pages/GroupsPage'
 import FeedsPage from './pages/FeedsPage'
+import CategoriesPage from './pages/CategoriesPage'
+import HelpPage from './pages/HelpPage'
 import { useStatus } from './hooks/useStatus'
 import { useTheme } from './hooks/useTheme'
 
-export type PageId = 'status' | 'config' | 'groups' | 'feeds'
+export type PageId = 'status' | 'help' | 'config' | 'groups' | 'feeds' | 'categories'
 
 const pageConfig: Record<PageId, { title: string; desc: string }> = {
     status: { title: '仪表盘', desc: '插件运行状态与数据概览' },
+    help: { title: '插件说明', desc: '使用帮助与介绍' },
     config: { title: '插件配置', desc: '基础设置与参数配置' },
     groups: { title: '群管理', desc: '管理群的启用与禁用' },
-    feeds: { title: 'RSS 订阅', desc: '管理 RSS 订阅源' }
+    feeds: { title: 'RSS 订阅', desc: '管理 RSS 订阅源' },
+    categories: { title: '分类管理', desc: '对订阅源进行分组管理' }
 }
 
 function App() {
@@ -38,9 +42,11 @@ function App() {
     const renderPage = () => {
         switch (currentPage) {
             case 'status': return <StatusPage status={status} onRefresh={fetchStatus} />
+            case 'help': return <HelpPage />
             case 'config': return <ConfigPage />
             case 'groups': return <GroupsPage />
             case 'feeds': return <FeedsPage onRefresh={fetchStatus} />
+            case 'categories': return <CategoriesPage />
             default: return <StatusPage status={status} onRefresh={fetchStatus} />
         }
     }

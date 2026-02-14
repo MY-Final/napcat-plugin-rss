@@ -6,6 +6,7 @@ export interface FeedConfig {
     id: string;
     url: string;
     name: string;
+    categoryId?: string;
     enabled: boolean;
     updateInterval: number;
     sendMode: SendMode;
@@ -17,6 +18,14 @@ export interface FeedConfig {
     isRunning?: boolean;
 }
 
+export interface Category {
+    id: string;
+    name: string;
+    color?: string;
+    createdAt: number;
+    feedCount?: number;
+}
+
 export interface PluginStatus {
     pluginName: string
     uptime: number
@@ -26,6 +35,16 @@ export interface PluginStatus {
         processed: number
         todayProcessed: number
         lastUpdateDay: string
+    }
+    feeds?: {
+        total: number
+        enabled: number
+        running: number
+    }
+    puppeteer?: {
+        status: string
+        error: string
+        endpoint: string
     }
 }
 

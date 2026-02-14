@@ -7,6 +7,19 @@ interface StatusPageProps {
     onRefresh: () => void
 }
 
+interface ExtendedStatus extends PluginStatus {
+    feeds?: {
+        total: number
+        enabled: number
+        running: number
+    }
+    puppeteer?: {
+        status: string
+        error: string
+        endpoint: string
+    }
+}
+
 /** 将毫秒格式化为可读时长 */
 function formatUptime(uptimeMs: number): string {
     const seconds = Math.floor(uptimeMs / 1000)
@@ -24,6 +37,7 @@ function formatUptime(uptimeMs: number): string {
 export default function StatusPage({ status, onRefresh }: StatusPageProps) {
     const [displayUptime, setDisplayUptime] = useState<string>('-')
     const [syncInfo, setSyncInfo] = useState<{ baseUptime: number; syncTime: number } | null>(null)
+    const extStatus = status as ExtendedStatus | null
 
     useEffect(() => {
         if (status?.uptime !== undefined && status.uptime > 0) {
@@ -72,7 +86,7 @@ export default function StatusPage({ status, onRefresh }: StatusPageProps) {
         },
         {
             label: '订阅总数',
-            value: String(Object.keys(config.feeds || {}).length),
+            value: String(extStatus?.feeds?.total || Object.keys(config.feeds || {}).length),
             icon: <IconActivity size={18} />,
             color: 'text-amber-500',
             bg: 'bg-amber-500/10',
@@ -103,26 +117,58 @@ export default function StatusPage({ status, onRefresh }: StatusPageProps) {
                 ))}
             </div>
 
-            {/* 配置概览 */}
-            <div className="card p-5 hover-lift animate-fade-in-up">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                        <IconTerminal size={16} className="text-gray-400" />
-                        基础信息
-                    </h3>
-                    <button onClick={onRefresh} className="btn-ghost btn text-xs px-2.5 py-1.5">
-                        <IconRefresh size={13} />
-                        刷新
-                    </button>
-                </div>
-                <div className="space-y-3">
-                    <InfoRow label="命令前缀" value={config.commandPrefix} />
-                    <InfoRow label="冷却时间" value={`${config.cooldownSeconds} 秒`} />
-                    <InfoRow label="调试模式" value={config.debug ? '开启' : '关闭'} />
-                    <InfoRow label="默认发送方式" value={{ single: '单条消息', forward: '合并转发', puppeteer: '图片渲染' }[config.defaultSendMode] || '合并转发'} />
-                    <InfoRow label="默认轮询间隔" value={`${config.defaultUpdateInterval} 分钟`} />
-                    <InfoRow label="Puppeteer 地址" value={config.puppeteerEndpoint} />
-                </div>
+            {/* 运行状态和Puppeteer状态 */}
+            <div className="space-y-4">
+
+                {/* 订阅状态 */}
+                {extStatus?.feeds && (
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="card p-4 text-center">
+                            <div className="text-2xl font-bold text-purple-500">{extStatus.feeds.total}</div>
+                            <div className="text-xs text-gray-500 mt-1">订阅总数</div>
+                        </div>
+                        <div className="card p-4 text-center">
+                            <div className="text-2xl font-bold text-emerald-500">{extStatus.feeds.enabled}</div>
+                            <div className="text-xs text-gray-500 mt-1">已启用</div>
+                        </div>
+                        <div className="card p-4 text-center">
+                            <div className="text-2xl font-bold text-blue-500">{extStatus.feeds.running}</div>
+                            <div className="text-xs text-gray-500 mt-1">运行中</div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Puppeteer 状态 */}
+                {extStatus?.puppeteer && (
+                    <div className={`card p-5 border-l-4 ${
+                        extStatus.puppeteer.status === 'connected' 
+                            ? 'border-l-emerald-500' 
+                            : 'border-l-red-500'
+                    }`}>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className={`w-3 h-3 rounded-full ${
+                                    extStatus.puppeteer.status === 'connected' 
+                                        ? 'bg-emerald-500 animate-pulse' 
+                                        : 'bg-red-500'
+                                }`}></div>
+                                <div>
+                                    <div className="font-medium text-gray-900 dark:text-white">
+                                        Puppeteer 服务
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                        {extStatus.puppeteer.status === 'connected' ? '已连接' : '未连接'}
+                                        <span className="mx-1">•</span>
+                                        {extStatus.puppeteer.endpoint}
+                                    </div>
+                                </div>
+                            </div>
+                            {extStatus.puppeteer.status !== 'connected' && extStatus.puppeteer.error && (
+                                <span className="text-xs text-red-500">{extStatus.puppeteer.error}</span>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     )
