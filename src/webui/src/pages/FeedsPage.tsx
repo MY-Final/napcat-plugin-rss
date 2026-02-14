@@ -13,7 +13,10 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
     const [groups, setGroups] = useState<GroupInfo[]>([])
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
+    const [showDetail, setShowDetail] = useState(false)
     const [editingFeed, setEditingFeed] = useState<FeedConfig | null>(null)
+    const [detailFeed, setDetailFeed] = useState<FeedConfig | null>(null)
+    const [deleteConfirm, setDeleteConfirm] = useState<FeedConfig | null>(null)
 
     const fetchFeeds = async () => {
         try {
@@ -48,13 +51,19 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
 
     const handleEdit = (feed: FeedConfig) => {
         setEditingFeed(feed)
+        setShowDetail(false)
         setShowModal(true)
     }
 
-    const handleDelete = async (feed: FeedConfig) => {
-        if (!confirm(`确定删除订阅 "${feed.name}" 吗？`)) return
+    const handleViewDetail = (feed: FeedConfig) => {
+        setDetailFeed(feed)
+        setShowDetail(true)
+    }
+
+    const handleDelete = async () => {
+        if (!deleteConfirm) return
         try {
-            const res = await noAuthFetch(`/feeds/${feed.id}`, { method: 'DELETE' })
+            const res = await noAuthFetch(`/feeds/${deleteConfirm.id}`, { method: 'DELETE' })
             if (res.code === 0) {
                 showToast('删除成功', 'success')
                 fetchFeeds()
@@ -65,6 +74,7 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
         } catch (e) {
             showToast('删除失败', 'error')
         }
+        setDeleteConfirm(null)
     }
 
     const handleToggle = async (feed: FeedConfig) => {
@@ -140,32 +150,132 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
                     <h2 className="text-lg font-semibold">RSS 订阅管理</h2>
                     <p className="text-sm text-gray-500">管理 RSS 订阅源和推送设置</p>
                 </div>
-                <button onClick={handleAdd} className="btn-primary">
+                <button onClick={handleAdd} className="btn-primary rounded-full px-5">
                     + 添加订阅
                 </button>
             </div>
 
             {feeds.length === 0 ? (
-                <div className="card p-8 text-center">
+                <div className="card p-12 text-center">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                    </div>
                     <div className="text-gray-400 mb-4">暂无订阅</div>
-                    <button onClick={handleAdd} className="btn-primary">
+                    <button onClick={handleAdd} className="btn-primary rounded-full px-6">
                         添加第一个订阅
                     </button>
                 </div>
             ) : (
-                <div className="grid gap-4">
-                    {feeds.map((feed) => (
-                        <FeedCard
-                            key={feed.id}
-                            feed={feed}
-                            groups={groups}
-                            onEdit={() => handleEdit(feed)}
-                            onDelete={() => handleDelete(feed)}
-                            onToggle={() => handleToggle(feed)}
-                            onCheck={() => handleCheck(feed)}
-                        />
-                    ))}
+                <div className="card overflow-hidden rounded-xl">
+                    <table className="w-full">
+                        <thead className="bg-gray-50 dark:bg-gray-800/50">
+                            <tr>
+                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">状态</th>
+                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">订阅名称</th>
+                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">发送方式</th>
+                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">推送群</th>
+                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">轮询间隔</th>
+                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {feeds.map((feed) => (
+                                <tr 
+                                    key={feed.id} 
+                                    className="hover:bg-gray-50 dark:hover:bg-gray-800/30 cursor-pointer transition-colors"
+                                    onClick={() => handleViewDetail(feed)}
+                                >
+                                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                                            feed.enabled 
+                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' 
+                                                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                                        }`}>
+                                            {feed.enabled ? '运行中' : '已禁用'}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="font-medium text-gray-900 dark:text-white">{feed.name}</div>
+                                        <div className="text-xs text-gray-400 truncate max-w-[200px]">{feed.url}</div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <span className="text-sm text-gray-600 dark:text-gray-300">
+                                            {feed.sendMode === 'forward' ? '📋 合并转发' : feed.sendMode === 'single' ? '📝 单条消息' : '🖼️ 图片渲染'}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <span className="text-sm text-gray-600 dark:text-gray-300">{feed.groups.length} 个群</span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <span className="text-sm text-gray-600 dark:text-gray-300">{feed.updateInterval} 分钟</span>
+                                    </td>
+                                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                            <button 
+                                                onClick={() => handleCheck(feed)} 
+                                                className="p-1.5 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors"
+                                                title="检查更新"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            </button>
+                                            <button 
+                                                onClick={() => handleToggle(feed)} 
+                                                className={`p-1.5 rounded-full transition-colors ${
+                                                    feed.enabled 
+                                                        ? 'hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-500' 
+                                                        : 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-500'
+                                                }`}
+                                                title={feed.enabled ? '禁用' : '启用'}
+                                            >
+                                                {feed.enabled ? (
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                ) : (
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                )}
+                                            </button>
+                                            <button 
+                                                onClick={() => handleEdit(feed)} 
+                                                className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors"
+                                                title="编辑"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                            <button 
+                                                onClick={() => setDeleteConfirm(feed)} 
+                                                className="p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 hover:text-red-500 transition-colors"
+                                                title="删除"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
+            )}
+
+            {showDetail && detailFeed && (
+                <FeedDetailModal
+                    feed={detailFeed}
+                    groups={groups}
+                    onClose={() => setShowDetail(false)}
+                    onEdit={() => handleEdit(detailFeed)}
+                />
             )}
 
             {showModal && (
@@ -176,80 +286,122 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
                     onClose={() => setShowModal(false)}
                 />
             )}
+
+            {deleteConfirm && (
+                <ConfirmModal
+                    title="删除订阅"
+                    message={`确定要删除订阅 "${deleteConfirm.name}" 吗？此操作不可恢复。`}
+                    onConfirm={handleDelete}
+                    onCancel={() => setDeleteConfirm(null)}
+                />
+            )}
         </div>
     )
 }
 
-function FeedCard({
+function FeedDetailModal({
     feed,
     groups,
+    onClose,
     onEdit,
-    onDelete,
-    onToggle,
-    onCheck,
 }: {
     feed: FeedConfig
     groups: GroupInfo[]
+    onClose: () => void
     onEdit: () => void
-    onDelete: () => void
-    onToggle: () => void
-    onCheck: () => void
 }) {
-    const sendModeText: Record<SendMode, string> = {
-        single: '单条消息',
-        forward: '合并转发',
-        puppeteer: '图片渲染',
+    const sendModeText: Record<SendMode, { text: string; icon: string; color: string }> = {
+        single: { text: '单条消息', icon: '📝', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+        forward: { text: '合并转发', icon: '📋', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
+        puppeteer: { text: '图片渲染', icon: '🖼️', color: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400' },
     }
 
     const feedGroups = groups.filter((g) => feed.groups.includes(String(g.group_id)))
 
-    return (
-        <div className="card p-4 hover-lift">
-            <div className="flex items-start justify-between">
-                <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className={`w-2 h-2 rounded-full ${feed.enabled ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-                        <span className="font-medium">{feed.name}</span>
-                        {feed.isRunning && <span className="text-xs text-emerald-500">(运行中)</span>}
+    return createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={onClose}>
+            <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full ${feed.enabled ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-gray-100 dark:bg-gray-700'} flex items-center justify-center`}>
+                            <span className={`text-lg ${feed.enabled ? 'text-emerald-500' : 'text-gray-400'}`}>📡</span>
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-lg">{feed.name}</h3>
+                            <p className={`text-xs ${feed.enabled ? 'text-emerald-500' : 'text-gray-400'}`}>
+                                {feed.enabled ? '运行中' : '已禁用'}
+                            </p>
+                        </div>
                     </div>
-                    <div className="text-xs text-gray-400 mb-2">{feed.url}</div>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                        <span>发送方式: {sendModeText[feed.sendMode]}</span>
-                        <span>轮询间隔: {feed.updateInterval} 分钟</span>
-                        <span>推送群: {feed.groups.length} 个</span>
-                        {feed.errorCount && feed.errorCount > 0 && (
-                            <span className="text-red-500">错误: {feed.errorCount} 次</span>
-                        )}
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                
+                <div className="p-5 space-y-4">
+                    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
+                        <label className="text-xs text-gray-400 uppercase font-medium">RSS 地址</label>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 break-all">{feed.url}</p>
                     </div>
-                    {feedGroups.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                            {feedGroups.slice(0, 3).map((g) => (
-                                <span key={g.group_id} className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
-                                    {g.group_name}
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
+                            <label className="text-xs text-gray-400 uppercase font-medium">发送方式</label>
+                            <div className="mt-2">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${sendModeText[feed.sendMode].color}`}>
+                                    {sendModeText[feed.sendMode].icon} {sendModeText[feed.sendMode].text}
                                 </span>
-                            ))}
-                            {feedGroups.length > 3 && (
-                                <span className="text-xs text-gray-400">+{feedGroups.length - 3} 更多</span>
+                            </div>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
+                            <label className="text-xs text-gray-400 uppercase font-medium">轮询间隔</label>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">{feed.updateInterval} 分钟</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
+                        <label className="text-xs text-gray-400 uppercase font-medium">推送群组 ({feed.groups.length})</label>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {feedGroups.length > 0 ? feedGroups.map((g) => (
+                                <span key={g.group_id} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500">
+                                    👥 {g.group_name}
+                                </span>
+                            )) : (
+                                <span className="text-sm text-gray-400">未配置推送群组</span>
                             )}
+                        </div>
+                    </div>
+
+                    {feed.lastUpdateTime && (
+                        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
+                            <label className="text-xs text-gray-400 uppercase font-medium">最后更新</label>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                                {new Date(feed.lastUpdateTime).toLocaleString('zh-CN')}
+                            </p>
+                        </div>
+                    )}
+
+                    {feed.errorCount && feed.errorCount > 0 && (
+                        <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4">
+                            <label className="text-xs text-red-400 uppercase font-medium">错误次数</label>
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-1">{feed.errorCount} 次</p>
                         </div>
                     )}
                 </div>
-                <div className="flex items-center gap-2">
-                    <button onClick={onCheck} className="btn-ghost btn text-xs px-2 py-1" title="检查更新">
-                        检查
+
+                <div className="p-5 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                    <button onClick={onClose} className="btn-ghost rounded-full px-5">
+                        关闭
                     </button>
-                    <button onClick={onToggle} className={`btn-ghost btn text-xs px-2 py-1 ${feed.enabled ? 'text-amber-500' : 'text-emerald-500'}`}>
-                        {feed.enabled ? '禁用' : '启用'}
-                    </button>
-                    <button onClick={onEdit} className="btn-ghost btn text-xs px-2 py-1">
+                    <button onClick={onEdit} className="btn-primary rounded-full px-5">
                         编辑
-                    </button>
-                    <button onClick={onDelete} className="btn-ghost btn text-xs px-2 py-1 text-red-500">
-                        删除
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     )
 }
 
@@ -271,13 +423,17 @@ function FeedModal({
     const [sendMode, setSendMode] = useState<SendMode>(feed?.sendMode || 'forward')
     const [selectedGroups, setSelectedGroups] = useState<string[]>(feed?.groups || [])
     const [customHtml, setCustomHtml] = useState(feed?.customHtmlTemplate || '')
+    const [testing, setTesting] = useState(false)
+    const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const autoName = url.startsWith('http') ? new URL(url).hostname : ''
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
         if (!url) return
         onSave({
             url,
-            name: name || new URL(url).hostname,
+            name: name || autoName,
             enabled,
             updateInterval,
             sendMode,
@@ -286,129 +442,315 @@ function FeedModal({
         })
     }
 
+    const handleTest = async () => {
+        if (!url) return
+        setTesting(true)
+        setTestResult(null)
+        try {
+            const res = await noAuthFetch<{ id: string }>('/feeds', {
+                method: 'POST',
+                body: JSON.stringify({ url, name: 'test' })
+            })
+            if (res.code === 0) {
+                setTestResult({ success: true, message: 'RSS 源连接成功！' })
+                if (res.data?.id) {
+                    await noAuthFetch(`/feeds/${res.data.id}`, { method: 'DELETE' })
+                }
+            } else {
+                setTestResult({ success: false, message: res.message || '连接失败' })
+            }
+        } catch (e: any) {
+            setTestResult({ success: false, message: e.message || '连接失败' })
+        }
+        setTesting(false)
+    }
+
     const toggleGroup = (groupId: string) => {
         setSelectedGroups((prev) =>
             prev.includes(groupId) ? prev.filter((g) => g !== groupId) : [...prev, groupId]
         )
     }
 
-    return (
-        <>
-            {createPortal(
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={onClose}>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                            <h3 className="font-semibold">{feed ? '编辑订阅' : '添加订阅'}</h3>
-                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">&times;</button>
+    const selectAllGroups = () => {
+        setSelectedGroups(groups.map((g) => String(g.group_id)))
+    }
+
+    const clearAllGroups = () => {
+        setSelectedGroups([])
+    }
+
+    const togglePuppeteer = (enablePuppeteer: boolean) => {
+        setSendMode(enablePuppeteer ? 'puppeteer' : 'forward')
+    }
+
+    return createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={onClose}>
+            <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white">
+                            {feed ? '✏️' : '➕'}
                         </div>
-                        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">RSS 地址 *</label>
-                                <input
-                                    type="url"
-                                    value={url}
-                                    onChange={(e) => setUrl(e.target.value)}
-                                    className="input w-full"
-                                    placeholder="https://example.com/feed.xml"
-                                    required
-                                    disabled={!!feed}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">显示名称</label>
-                                <input
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    className="input w-full"
-                                    placeholder="留空则自动提取"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">轮询间隔（分钟）</label>
-                                    <input
-                                        type="number"
-                                        value={updateInterval}
-                                        onChange={(e) => setUpdateInterval(Number(e.target.value))}
-                                        className="input w-full"
-                                        min={5}
-                                        max={1440}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">发送方式</label>
-                                    <select
-                                        value={sendMode}
-                                        onChange={(e) => setSendMode(e.target.value as SendMode)}
-                                        className="input w-full"
-                                    >
-                                        <option value="forward">合并转发</option>
-                                        <option value="single">单条消息</option>
-                                        <option value="puppeteer">图片渲染</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">推送群组</label>
-                                <div className="max-h-32 overflow-y-auto border rounded-lg p-2 space-y-1">
-                                    {groups.length === 0 ? (
-                                        <div className="text-sm text-gray-400">暂无群组</div>
-                                    ) : (
-                                        groups.map((g) => (
-                                            <label key={g.group_id} className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedGroups.includes(String(g.group_id))}
-                                                    onChange={() => toggleGroup(String(g.group_id))}
-                                                    className="rounded"
-                                                />
-                                                <span className="text-sm">{g.group_name}</span>
-                                            </label>
-                                        ))
-                                    )}
-                                </div>
-                            </div>
-                            {sendMode === 'puppeteer' && (
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">
-                                        自定义 HTML 模板
-                                        <span className="text-gray-400 font-normal ml-2">(留空使用默认)</span>
-                                    </label>
-                                    <textarea
-                                        value={customHtml}
-                                        onChange={(e) => setCustomHtml(e.target.value)}
-                                        className="input w-full font-mono text-xs"
-                                        rows={8}
-                                        placeholder={`<!DOCTYPE html>
-<!-- 可用变量: {{title}}, {{link}}, {{description}}, {{author}}, {{pubDate}}, {{image}}, {{feedName}} -->
-<body>{{title}}</body>`}
-                                    />
-                                </div>
-                            )}
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    id="enabled-modal"
-                                    checked={enabled}
-                                    onChange={(e) => setEnabled(e.target.checked)}
-                                    className="rounded"
-                                />
-                                <label htmlFor="enabled-modal" className="text-sm">启用订阅</label>
-                            </div>
-                            <div className="flex justify-end gap-2 pt-4">
-                                <button type="button" onClick={onClose} className="btn-ghost">
-                                    取消
-                                </button>
-                                <button type="submit" className="btn-primary">
-                                    保存
-                                </button>
-                            </div>
-                        </form>
+                        <div>
+                            <h3 className="font-semibold text-lg">{feed ? '编辑订阅' : '添加订阅'}</h3>
+                            <p className="text-xs text-gray-400">{feed ? '修改订阅配置' : '创建新的 RSS 订阅'}</p>
+                        </div>
                     </div>
-                </div>,
-                document.body
-            )}
-        </>
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-5 space-y-5 overflow-y-auto flex-1">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">RSS 地址 <span className="text-red-500">*</span></label>
+                        <div className="flex gap-2">
+                            <input
+                                type="url"
+                                value={url}
+                                onChange={(e) => setUrl(e.target.value)}
+                                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                placeholder="https://example.com/feed.xml"
+                                required
+                                disabled={!!feed}
+                            />
+                            {!feed && (
+                                <button
+                                    type="button"
+                                    onClick={handleTest}
+                                    disabled={!url || testing}
+                                    className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                                >
+                                    {testing ? '测试中...' : '测试连接'}
+                                </button>
+                            )}
+                        </div>
+                        {testResult && (
+                            <div className={`mt-2 text-xs px-3 py-2 rounded-lg ${testResult.success ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
+                                {testResult.message}
+                            </div>
+                        )}
+                        {autoName && !name && (
+                            <p className="mt-1.5 text-xs text-gray-400">自动名称: {autoName}</p>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">显示名称</label>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                            placeholder="留空则自动提取"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setSendMode('forward')}
+                            className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all ${
+                                sendMode === 'forward'
+                                    ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
+                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            }`}
+                        >
+                            📋 转发
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSendMode('single')}
+                            className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all ${
+                                sendMode === 'single'
+                                    ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
+                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            }`}
+                        >
+                            📝 消息
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSendMode('puppeteer')}
+                            className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all ${
+                                sendMode === 'puppeteer'
+                                    ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
+                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            }`}
+                        >
+                            🖼️ 图片
+                        </button>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">轮询间隔</label>
+                        <div className="flex items-center gap-3">
+                            <input
+                                type="range"
+                                value={updateInterval}
+                                onChange={(e) => setUpdateInterval(Number(e.target.value))}
+                                min={1}
+                                max={120}
+                                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            />
+                            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-1.5 min-w-[80px]">
+                                <input
+                                    type="number"
+                                    value={updateInterval}
+                                    onChange={(e) => setUpdateInterval(Number(e.target.value))}
+                                    className="w-12 bg-transparent text-center text-sm font-medium outline-none"
+                                    min={1}
+                                    max={1440}
+                                />
+                                <span className="text-gray-400 text-xs">分钟</span>
+                            </div>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>1分钟</span>
+                            <span>120分钟</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">推送群组</label>
+                            <div className="flex gap-2">
+                                <button type="button" onClick={selectAllGroups} className="text-xs text-purple-500 hover:text-purple-600">全选</button>
+                                <button type="button" onClick={clearAllGroups} className="text-xs text-gray-400 hover:text-gray-500">清空</button>
+                            </div>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-xl p-3 space-y-2">
+                            {groups.length === 0 ? (
+                                <div className="text-sm text-gray-400 text-center py-4">暂无群组</div>
+                            ) : (
+                                groups.map((g) => (
+                                    <label 
+                                        key={g.group_id} 
+                                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                                            selectedGroups.includes(String(g.group_id)) 
+                                                ? 'bg-purple-50 dark:bg-purple-900/20' 
+                                                : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'
+                                        }`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedGroups.includes(String(g.group_id))}
+                                            onChange={() => toggleGroup(String(g.group_id))}
+                                            className="w-4 h-4 text-purple-500 rounded focus:ring-purple-500"
+                                        />
+                                        <span className="text-sm text-gray-700 dark:text-gray-300">{g.group_name}</span>
+                                        <span className="text-xs text-gray-400 ml-auto">{g.member_count} 人</span>
+                                    </label>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    {sendMode === 'puppeteer' && (
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    自定义 HTML 模板
+                                </label>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setCustomHtml('')} 
+                                    className="text-xs text-gray-400 hover:text-gray-500"
+                                >
+                                    清空
+                                </button>
+                            </div>
+                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-3">
+                                <div className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-2">可用变量：</div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {['{{title}}', '{{link}}', '{{description}}', '{{author}}', '{{pubDate}}', '{{image}}', '{{feedName}}'].map((v) => (
+                                        <button
+                                            key={v}
+                                            type="button"
+                                            onClick={() => setCustomHtml(customHtml + ' ' + v)}
+                                            className="px-2 py-0.5 bg-white dark:bg-amber-900/50 rounded text-xs text-amber-600 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/70 transition-colors font-mono"
+                                        >
+                                            {v}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <textarea
+                                value={customHtml}
+                                onChange={(e) => setCustomHtml(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 font-mono text-xs focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                rows={6}
+                                placeholder="<body>{{title}}</body>"
+                            />
+                            <p className="text-xs text-gray-400 mt-1.5">留空使用默认模板</p>
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
+                        <input
+                            type="checkbox"
+                            id="enabled-modal"
+                            checked={enabled}
+                            onChange={(e) => setEnabled(e.target.checked)}
+                            className="w-5 h-5 text-purple-500 rounded focus:ring-purple-500"
+                        />
+                        <label htmlFor="enabled-modal" className="text-sm text-gray-700 dark:text-gray-300">
+                            启用订阅
+                        </label>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2 flex-shrink-0">
+                        <button type="button" onClick={onClose} className="btn-ghost rounded-full px-6">
+                            取消
+                        </button>
+                        <button type="submit" className="btn-primary rounded-full px-6">
+                            保存
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>,
+        document.body
+    )
+}
+
+function ConfirmModal({
+    title,
+    message,
+    onConfirm,
+    onCancel,
+}: {
+    title: string
+    message: string
+    onConfirm: () => void
+    onCancel: () => void
+}) {
+    return createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={onCancel}>
+            <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-sm shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-4 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                        <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-lg">{title}</h3>
+                    </div>
+                </div>
+                <p className="text-gray-500 dark:text-gray-400 mb-6">{message}</p>
+                <div className="flex justify-end gap-3">
+                    <button onClick={onCancel} className="btn-ghost rounded-full px-5">
+                        取消
+                    </button>
+                    <button onClick={onConfirm} className="bg-red-500 hover:bg-red-600 text-white rounded-full px-5 py-2 transition-colors">
+                        确认删除
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
     )
 }

@@ -27,36 +27,13 @@ export function buildConfigSchema(ctx: NapCatPluginContext): PluginConfigSchema 
             </div>
         `),
         ctx.NapCatConfig.boolean('enabled', '启用插件', true, '是否启用此插件的功能'),
-        ctx.NapCatConfig.boolean('debug', '调试模式', false, '启用后将输出详细的调试日志'),
-        ctx.NapCatConfig.text('commandPrefix', '命令前缀', '#rss', '触发命令的前缀，默认为 #rss'),
-        ctx.NapCatConfig.number('cooldownSeconds', '冷却时间（秒）', 60, '同一命令请求冷却时间，0 表示不限制'),
         
-        ctx.NapCatConfig.html('<h4 style="margin: 20px 0 10px 0; font-size: 14px; color: #666;">RSS 推送设置</h4>'),
-        
-        ctx.NapCatConfig.select(
-            'defaultSendMode', 
-            '默认发送方式', 
-            [
-                { label: '合并转发', value: 'forward' },
-                { label: '单条消息', value: 'single' },
-                { label: 'Puppeteer 图片', value: 'puppeteer' },
-            ],
-            'forward',
-            '新订阅默认使用的发送方式'
-        ),
-        
-        ctx.NapCatConfig.number(
-            'defaultUpdateInterval', 
-            '默认轮询间隔（分钟）', 
-            30, 
-            'RSS 源更新检测间隔，范围 5-1440'
-        ),
-        
-        ctx.NapCatConfig.text(
-            'puppeteerEndpoint', 
-            'Puppeteer 服务地址', 
-            'http://127.0.0.1:6099', 
-            'napcat-plugin-puppeteer 的服务地址'
-        ),
+        ctx.NapCatConfig.html(`
+            <div style="font-size: 13px; color: #4b5563; padding: 12px; background: #f9fafb; border-radius: 8px; margin: 16px 0;">
+                更多高级配置（订阅管理、轮询间隔、发送方式、Puppeteer 设置等）请前往 
+                <a href="/plugin/napcat-plugin-rss/page/dashboard" target="_top" style="color: #667eea; text-decoration: none; font-weight: 600;">WebUI 控制台</a> 
+                进行管理。
+            </div>
+        `),
     );
 }
