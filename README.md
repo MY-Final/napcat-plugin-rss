@@ -87,7 +87,7 @@ cp -r dist/* /path/to/napcat/plugins/napcat-plugin-rss/
 
 ## 依赖
 
-- [napcat-plugin-puppeteer](https://github.com/NapNeko/napcat-plugin-puppeteer)：用于图片渲染（仅 Puppeteer 模式需要）
+- [napcat-plugin-puppeteer](https://github.com/AQiaoYo/napcat-plugin-puppeteer)：用于图片渲染（仅 Puppeteer 模式需要）
 
 ## 配置
 
