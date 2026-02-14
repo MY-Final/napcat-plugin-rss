@@ -24,14 +24,16 @@ class FeedScheduler {
             this.stopFeed(feed.id);
         }
 
-        const intervalMs = (feed.updateInterval || pluginState.config.defaultUpdateInterval) * 60 * 1000;
+        const isDebug = pluginState.config.debug;
+        const intervalMinutes = isDebug && feed.updateInterval === 30 ? 1 : feed.updateInterval;
+        const intervalMs = intervalMinutes * 60 * 1000;
         
         const timer = setInterval(async () => {
             await this.checkUpdate(feed.id);
         }, intervalMs);
 
         this.timers.set(feed.id, timer);
-        pluginState.logger.debug(`启动 RSS 定时任务: ${feed.name} (间隔 ${feed.updateInterval} 分钟)`);
+        pluginState.logger.debug(`启动 RSS 定时任务: ${feed.name} (间隔 ${intervalMinutes} 分钟)`);
 
         setTimeout(async () => {
             await this.checkUpdate(feed.id);
@@ -84,6 +86,10 @@ class FeedScheduler {
         }
 
         return result.newItems;
+    }
+
+    async checkUpdateNow(feedId: string): Promise<FeedItem[]> {
+        return this.checkUpdate(feedId);
     }
 
     private async sendToGroup(feed: FeedConfig, groupId: string, items: FeedItem[]): Promise<void> {

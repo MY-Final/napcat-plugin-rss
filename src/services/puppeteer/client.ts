@@ -10,7 +10,7 @@ export class PuppeteerClient {
     private endpoint: string;
 
     constructor(endpoint?: string) {
-        this.endpoint = endpoint || pluginState.config.puppeteerEndpoint || 'http://127.0.0.1:3000';
+        this.endpoint = endpoint || pluginState.config.puppeteerEndpoint || 'http://127.0.0.1:6099';
     }
 
     setEndpoint(endpoint: string): void {
@@ -20,18 +20,33 @@ export class PuppeteerClient {
     async screenshot(options: ScreenshotOptions): Promise<string> {
         const url = `${this.endpoint}/plugin/napcat-plugin-puppeteer/api/screenshot`;
         
-        pluginState.logger.debug(`Puppeteer screenshot: ${options.file.slice(0, 100)}`);
+        pluginState.logger.debug(`Puppeteer screenshot: ${String(options.file).slice(0, 100)}`);
+
+        const requestBody = {
+            file: options.file,
+            file_type: options.file_type || 'htmlString',
+            selector: options.selector || 'body',
+            omitBackground: options.omitBackground ?? false,
+            type: options.type || 'png',
+            quality: options.quality,
+            fullPage: options.fullPage ?? false,
+            setViewport: options.setViewport,
+            waitSelector: options.waitForSelector,
+            waitForTimeout: options.waitForTimeout,
+            encoding: options.encoding || 'base64',
+        };
 
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(options),
+            body: JSON.stringify(requestBody),
         });
 
         if (!response.ok) {
-            throw new Error(`Puppeteer HTTP ${response.status}: ${response.statusText}`);
+            const errorText = await response.text();
+            throw new Error(`Puppeteer HTTP ${response.status}: ${response.statusText} - ${errorText}`);
         }
 
         const result: ScreenshotResponse = await response.json();
@@ -56,6 +71,7 @@ export class PuppeteerClient {
             file_type: 'htmlString',
             type: 'png',
             fullPage: false,
+            setViewport: { width: 600, height: 400, deviceScaleFactor: 2 },
             ...options,
         });
     }

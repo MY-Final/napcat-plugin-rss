@@ -15,7 +15,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
     feeds: {},
     defaultSendMode: 'forward',
     defaultUpdateInterval: 30,
-    puppeteerEndpoint: 'http://127.0.0.1:3000',
+    puppeteerEndpoint: 'http://127.0.0.1:6099',
 };
 
 export function buildConfigSchema(ctx: NapCatPluginContext): PluginConfigSchema {
@@ -55,7 +55,7 @@ export function buildConfigSchema(ctx: NapCatPluginContext): PluginConfigSchema 
         ctx.NapCatConfig.text(
             'puppeteerEndpoint', 
             'Puppeteer 服务地址', 
-            'http://127.0.0.1:3000', 
+            'http://127.0.0.1:6099', 
             'napcat-plugin-puppeteer 的服务地址'
         ),
     );
