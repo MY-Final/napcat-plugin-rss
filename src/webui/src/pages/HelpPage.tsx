@@ -246,12 +246,12 @@ export default function HelpPage() {
                                 它支持数百个主流网站，包括微博、知乎，B站、抖音、Twitter 等。
                             </p>
                             <p className="mt-3">
-                                访问 <a href="https://rsshub.doc8.dev/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">RSSHub 文档</a> 了解更多信息。
+                                访问 <a href="https://rsshub-doc.pages.dev/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">RSSHub 文档</a> 了解更多信息。
                             </p>
                         </div>
                         <div className="mt-4 flex gap-3">
                             <a
-                                href="https://rsshub.doc8.dev/"
+                                href="https://rsshub-doc.pages.dev/"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors"
