@@ -1,3 +1,5 @@
+![napcat-plugin-rss](https://count.getloli.com/@MY-Final_napcat-plugin-rss?name=napcat-plugin-rss&theme=minecraft&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
+
 # napcat-plugin-rss
 
 NapCat RSS 订阅推送插件，定时检测 RSS 更新并推送到 QQ 群。
