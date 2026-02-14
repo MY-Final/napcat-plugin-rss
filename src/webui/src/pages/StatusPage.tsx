@@ -122,11 +122,7 @@ export default function StatusPage({ status, onRefresh }: StatusPageProps) {
 
                 {/* 订阅状态 */}
                 {extStatus?.feeds && (
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="card p-4 text-center">
-                            <div className="text-2xl font-bold text-purple-500">{extStatus.feeds.total}</div>
-                            <div className="text-xs text-gray-500 mt-1">订阅总数</div>
-                        </div>
+                    <div className="grid grid-cols-2 gap-4">
                         <div className="card p-4 text-center">
                             <div className="text-2xl font-bold text-emerald-500">{extStatus.feeds.enabled}</div>
                             <div className="text-xs text-gray-500 mt-1">已启用</div>
