@@ -465,6 +465,7 @@ function FeedModal({
     const [selectedGroups, setSelectedGroups] = useState<string[]>(feed?.groups || [])
     const [groupSearch, setGroupSearch] = useState('')
     const [customHtml, setCustomHtml] = useState(feed?.customHtmlTemplate || '')
+    const [customForward, setCustomForward] = useState(feed?.customForwardTemplate || '')
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
@@ -482,6 +483,7 @@ function FeedModal({
             sendMode,
             groups: selectedGroups,
             customHtmlTemplate: customHtml || undefined,
+            customForwardTemplate: customForward || undefined,
         })
     }
 
@@ -556,8 +558,7 @@ function FeedModal({
                                 onChange={(e) => setUrl(e.target.value)}
                                 className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                                 placeholder="https://example.com/feed.xml"
-                                required
-                                disabled={!!feed}
+required
                             />
                             {!feed && (
                                 <button
@@ -790,6 +791,50 @@ function FeedModal({
                                 className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 font-mono text-xs focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                                 rows={6}
                                 placeholder="<body>{{title}}</body>"
+                            />
+<p className="text-xs text-gray-400 mt-1.5">留空使用默认模板</p>
+                        </div>
+                    )}
+
+                    {sendMode === 'forward' && (
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    自定义转发模板
+                                </label>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setCustomForward('')} 
+                                    className="text-xs text-gray-400 hover:text-gray-500"
+                                >
+                                    清空
+                                </button>
+                            </div>
+                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-3">
+                                <div className="text-xs text-blue-700 dark:text-blue-400 font-medium mb-2">可用变量：</div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {['{title}', '{link}', '{description}', '{author}', '{time}', '{feedName}'].map((v) => (
+                                        <button
+                                            key={v}
+                                            type="button"
+                                            onClick={() => setCustomForward(customForward + ' ' + v)}
+                                            className="px-2 py-0.5 bg-white dark:bg-blue-900/50 rounded text-xs text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/70 transition-colors font-mono"
+                                        >
+                                            {v}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <textarea
+                                value={customForward}
+                                onChange={(e) => setCustomForward(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 font-mono text-xs focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                rows={4}
+                                placeholder={`【{feedName}】
+{title}
+{description}
+链接: {link}
+作者: {author} | 时间: {time}`}
                             />
                             <p className="text-xs text-gray-400 mt-1.5">留空使用默认模板</p>
                         </div>

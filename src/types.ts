@@ -20,6 +20,7 @@ export interface FeedConfig {
     sendMode: SendMode;
     groups: string[];
     customHtmlTemplate?: string;
+    customForwardTemplate?: string;
     lastPublishTime?: number;
     lastUpdateTime?: number;
     errorCount?: number;

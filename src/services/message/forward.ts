@@ -5,6 +5,12 @@
 import type { FeedItem, FeedConfig, ForwardNode } from '../../types';
 import { pluginState } from '../../core/state';
 
+const DEFAULT_FORWARD_TEMPLATE = `【{feedName}】
+{title}
+{description}
+链接: {link}
+作者: {author} | 时间: {time}`;
+
 export async function sendForward(
     feed: FeedConfig,
     groupId: string,
@@ -26,31 +32,24 @@ export async function sendForward(
 }
 
 function buildForwardNode(feed: FeedConfig, item: FeedItem): ForwardNode {
+    const template = feed.customForwardTemplate || DEFAULT_FORWARD_TEMPLATE;
+    
+    const desc = item.description && item.description.length > 300 
+        ? item.description.slice(0, 300) + '...'
+        : item.description || '';
+    
+    const time = item.pubDate ? new Date(item.pubDate).toLocaleString('zh-CN') : '';
+    
+    const contentText = template
+        .replace(/{feedName}/g, feed.name)
+        .replace(/{title}/g, item.title || '')
+        .replace(/{description}/g, desc)
+        .replace(/{link}/g, item.link || '')
+        .replace(/{author}/g, item.author || '')
+        .replace(/{time}/g, time);
+    
     const content: Array<{ type: string; data: Record<string, string> }> = [];
-    
-    content.push({ type: 'text', data: { text: `【${feed.name}】` } });
-    content.push({ type: 'text', data: { text: item.title } });
-    
-    if (item.description) {
-        const desc = item.description.length > 300 
-            ? item.description.slice(0, 300) + '...'
-            : item.description;
-        content.push({ type: 'text', data: { text: desc } });
-    }
-    
-    if (item.link) {
-        content.push({ type: 'text', data: { text: `\n链接: ${item.link}` } });
-    }
-    
-    if (item.author || item.pubDate) {
-        const meta: string[] = [];
-        if (item.author) meta.push(`作者: ${item.author}`);
-        if (item.pubDate) {
-            const date = new Date(item.pubDate).toLocaleString('zh-CN');
-            meta.push(`时间: ${date}`);
-        }
-        content.push({ type: 'text', data: { text: meta.join(' | ') } });
-    }
+    content.push({ type: 'text', data: { text: contentText } });
 
     return {
         type: 'node',
