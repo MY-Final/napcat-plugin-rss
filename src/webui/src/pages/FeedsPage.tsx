@@ -18,6 +18,8 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
     const [editingFeed, setEditingFeed] = useState<FeedConfig | null>(null)
     const [detailFeed, setDetailFeed] = useState<FeedConfig | null>(null)
     const [deleteConfirm, setDeleteConfirm] = useState<FeedConfig | null>(null)
+    const [selectedFeeds, setSelectedFeeds] = useState<Set<string>>(new Set())
+    const [tagFilter, setTagFilter] = useState<string>('')
 
     const fetchFeeds = async () => {
         try {
@@ -115,10 +117,89 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
             } else {
                 showToast(res.message || '检查失败', 'error')
             }
-        } catch (e) {
+} catch (e) {
             showToast('检查失败', 'error')
         }
     }
+
+    const handleBatchEnable = async () => {
+        const ids = Array.from(selectedFeeds)
+        try {
+            const res = await noAuthFetch('/feeds/batch', {
+                method: 'PUT',
+                body: JSON.stringify({ ids, enabled: true })
+            })
+            if (res.code === 0) {
+                showToast(`已启用 ${ids.length} 个订阅`, 'success')
+                setSelectedFeeds(new Set())
+                fetchFeeds()
+            } else {
+                showToast(res.message || '操作失败', 'error')
+            }
+        } catch (e) {
+            showToast('操作失败', 'error')
+        }
+    }
+
+    const handleBatchDisable = async () => {
+        const ids = Array.from(selectedFeeds)
+        try {
+            const res = await noAuthFetch('/feeds/batch', {
+                method: 'PUT',
+                body: JSON.stringify({ ids, enabled: false })
+            })
+            if (res.code === 0) {
+                showToast(`已禁用 ${ids.length} 个订阅`, 'success')
+                setSelectedFeeds(new Set())
+                fetchFeeds()
+            } else {
+                showToast(res.message || '操作失败', 'error')
+            }
+        } catch (e) {
+            showToast('操作失败', 'error')
+        }
+    }
+
+    const handleBatchDelete = async () => {
+        const ids = Array.from(selectedFeeds)
+        try {
+            const res = await noAuthFetch('/feeds/batch', {
+                method: 'DELETE',
+                body: JSON.stringify({ ids })
+            })
+            if (res.code === 0) {
+                showToast(`已删除 ${ids.length} 个订阅`, 'success')
+                setSelectedFeeds(new Set())
+                fetchFeeds()
+            } else {
+                showToast(res.message || '操作失败', 'error')
+            }
+        } catch (e) {
+            showToast('操作失败', 'error')
+        }
+    }
+
+    const toggleSelect = (id: string) => {
+        const newSet = new Set(selectedFeeds)
+        if (newSet.has(id)) {
+            newSet.delete(id)
+        } else {
+            newSet.add(id)
+        }
+        setSelectedFeeds(newSet)
+    }
+
+    const toggleSelectAll = () => {
+        if (selectedFeeds.size === filteredFeeds.length) {
+            setSelectedFeeds(new Set())
+        } else {
+            setSelectedFeeds(new Set(filteredFeeds.map(f => f.id)))
+        }
+    }
+
+    const filteredFeeds = tagFilter 
+        ? feeds.filter(f => f.categoryId === tagFilter)
+        : feeds
 
     const handleSave = async (data: Partial<FeedConfig>) => {
         try {
@@ -180,25 +261,67 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
                     </button>
                 </div>
             ) : (
-                <div className="card overflow-hidden rounded-xl">
-                    <table className="w-full">
-                        <thead className="bg-gray-50 dark:bg-gray-800/50">
-                            <tr>
-                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">状态</th>
-                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">订阅名称</th>
-                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">发送方式</th>
-                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">推送群</th>
-                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">轮询间隔</th>
-                                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {feeds.map((feed) => (
-                                <tr 
-                                    key={feed.id} 
-                                    className="hover:bg-gray-50 dark:hover:bg-gray-800/30 cursor-pointer transition-colors"
-                                    onClick={() => handleViewDetail(feed)}
+                <>
+                    <div className="flex items-center justify-between mb-4 gap-4">
+                        <div className="flex items-center gap-3">
+                            {categories.length > 0 && (
+                                <select
+                                    value={tagFilter}
+                                    onChange={(e) => setTagFilter(e.target.value)}
+                                    className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-purple-500"
                                 >
+                                    <option value="">全部分组</option>
+                                    {categories.map(cat => (
+                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                    ))}
+                                </select>
+                            )}
+                            {selectedFeeds.size > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-gray-500">已选 {selectedFeeds.size} 项</span>
+                                    <button onClick={handleBatchEnable} className="text-xs px-2 py-1 bg-emerald-100 text-emerald-600 rounded hover:bg-emerald-200">启用</button>
+                                    <button onClick={handleBatchDisable} className="text-xs px-2 py-1 bg-amber-100 text-amber-600 rounded hover:bg-amber-200">禁用</button>
+                                    <button onClick={handleBatchDelete} className="text-xs px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200">删除</button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="card overflow-hidden rounded-xl">
+                        <table className="w-full">
+                            <thead className="bg-gray-50 dark:bg-gray-800/50">
+                                <tr>
+                                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase w-10">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedFeeds.size === filteredFeeds.length && filteredFeeds.length > 0}
+                                            onChange={toggleSelectAll}
+                                            className="rounded"
+                                        />
+                                    </th>
+                                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">状态</th>
+                                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">订阅名称</th>
+                                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">发送方式</th>
+                                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">推送群</th>
+                                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">轮询间隔</th>
+                                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {filteredFeeds.map((feed) => (
+                                    <tr 
+                                        key={feed.id} 
+                                        className={`hover:bg-gray-50 dark:hover:bg-gray-800/30 cursor-pointer transition-colors ${selectedFeeds.has(feed.id) ? 'bg-purple-50 dark:bg-purple-900/10' : ''}`}
+                                        onClick={() => handleViewDetail(feed)}
+                                    >
+                                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={selectedFeeds.has(feed.id)}
+                                                onChange={() => toggleSelect(feed.id)}
+                                                className="rounded"
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        </td>
                                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                                             feed.enabled 
@@ -283,6 +406,7 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
                         </tbody>
                     </table>
                 </div>
+                </>
             )}
 
             {showDetail && detailFeed && (

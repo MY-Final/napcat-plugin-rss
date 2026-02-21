@@ -359,10 +359,72 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
             feedScheduler.stopFeed(feedId);
             storage.deleteFeed(feedId);
 
-            ctx.logger.info(`删除 RSS 订阅: ${feed.name}`);
+ctx.logger.info(`删除 RSS 订阅: ${feed.name}`);
             res.json({ code: 0, message: 'ok' });
         } catch (err) {
             ctx.logger.error('删除订阅失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.putNoAuth('/feeds/batch', async (req, res) => {
+        try {
+            const body = req.body as { ids: string[]; enabled?: boolean } | undefined;
+            if (!body?.ids || !Array.isArray(body.ids)) {
+                return res.status(400).json({ code: -1, message: '缺少订阅 ID 列表' });
+            }
+
+            const { ids, enabled } = body;
+            let updatedCount = 0;
+
+            for (const feedId of ids) {
+                const feed = storage.getFeed(feedId);
+                if (!feed) continue;
+
+                if (enabled !== undefined) {
+                    const newEnabled = enabled;
+                    storage.updateFeed(feedId, { enabled: newEnabled });
+                    
+                    if (newEnabled) {
+                        feedScheduler.startFeed({ ...feed, enabled: true });
+                    } else {
+                        feedScheduler.stopFeed(feedId);
+                    }
+                }
+                updatedCount++;
+            }
+
+            ctx.logger.info(`批量更新订阅: ${updatedCount} 个`);
+            res.json({ code: 0, data: { count: updatedCount } });
+        } catch (err) {
+            ctx.logger.error('批量更新订阅失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.deleteNoAuth('/feeds/batch', async (req, res) => {
+        try {
+            const body = req.body as { ids: string[] } | undefined;
+            if (!body?.ids || !Array.isArray(body.ids)) {
+                return res.status(400).json({ code: -1, message: '缺少订阅 ID 列表' });
+            }
+
+            const { ids } = body;
+            let deletedCount = 0;
+
+            for (const feedId of ids) {
+                const feed = storage.getFeed(feedId);
+                if (!feed) continue;
+
+                feedScheduler.stopFeed(feedId);
+                storage.deleteFeed(feedId);
+                deletedCount++;
+            }
+
+            ctx.logger.info(`批量删除订阅: ${deletedCount} 个`);
+            res.json({ code: 0, data: { count: deletedCount } });
+        } catch (err) {
+            ctx.logger.error('批量删除订阅失败:', err);
             res.status(500).json({ code: -1, message: String(err) });
         }
     });
