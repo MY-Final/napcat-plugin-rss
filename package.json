@@ -5,7 +5,7 @@
   "type": "module",
   "main": "index.mjs",
   "description": "NapCat RSS 订阅推送插件 - 定时检测 RSS 更新并推送到群",
-  "author": "Your Name",
+  "author": "MY-Final",
   "license": "MIT",
   "keywords": [
     "napcat",

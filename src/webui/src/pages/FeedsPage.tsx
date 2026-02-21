@@ -221,7 +221,11 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
                                         <span className="text-sm text-gray-600 dark:text-gray-300">{feed.groups.length} 个群</span>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <span className="text-sm text-gray-600 dark:text-gray-300">{feed.updateInterval} 分钟</span>
+                                        <span className="text-sm text-gray-600 dark:text-gray-300">
+                                            {feed.updateInterval >= 60 && feed.updateInterval % 60 === 0 
+                                                ? `${feed.updateInterval / 60} 分钟` 
+                                                : `${feed.updateInterval} 秒`}
+                                        </span>
                                     </td>
                                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -387,7 +391,11 @@ function FeedDetailModal({
                         </div>
                         <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
                             <label className="text-xs text-gray-400 uppercase font-medium">轮询间隔</label>
-                            <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">{feed.updateInterval} 分钟</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                                        {feed.updateInterval >= 60 && feed.updateInterval % 60 === 0 
+                                            ? `${feed.updateInterval / 60} 分钟` 
+                                            : `${feed.updateInterval} 秒`}
+                                    </p>
                         </div>
                     </div>
 
