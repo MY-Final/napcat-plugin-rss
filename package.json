@@ -1,7 +1,7 @@
 {
   "name": "napcat-plugin-rss",
   "plugin": "RSS 订阅推送",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "main": "index.mjs",
   "description": "NapCat RSS 订阅推送插件 - 定时检测 RSS 更新并推送到群",
