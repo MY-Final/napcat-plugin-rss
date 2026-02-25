@@ -34,7 +34,7 @@ export async function sendPuppeteer(
             message_type: 'group',
             group_id: groupId,
             message: [
-                { type: 'text', data: { text: `【${feed.name}】更新啦~` } },
+                // { type: 'text', data: { text: `【${feed.name}】更新啦~` } },
                 { type: 'image', data: { file: `base64://${imageBase64}` } },
             ],
         },
