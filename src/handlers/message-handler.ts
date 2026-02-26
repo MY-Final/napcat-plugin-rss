@@ -211,8 +211,11 @@ async function handleList(
     for (const feed of feedList) {
         const status = feed.enabled ? '✅' : '❌';
         const modeText = { single: '单条', forward: '合并', puppeteer: '图片' }[feed.sendMode];
+        const intervalText = feed.updateInterval >= 60 && feed.updateInterval % 60 === 0
+            ? `${feed.updateInterval / 60}分钟`
+            : `${feed.updateInterval}秒`;
         lines.push(`${status} ${feed.name} (${feed.id})`);
-        lines.push(`   模式: ${modeText} | 群: ${feed.groups.length}个 | 间隔: ${feed.updateInterval}分钟`);
+        lines.push(`   模式: ${modeText} | 群: ${feed.groups.length}个 | 间隔: ${intervalText}`);
     }
 
     await sendGroupMessage(ctx, String(event.group_id), lines.join('\n'));
