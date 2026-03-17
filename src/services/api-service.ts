@@ -36,6 +36,7 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
         const feedList = Object.values(feeds);
         const enabledFeeds = feedList.filter(f => f.enabled).length;
         const runningFeeds = feedList.filter(f => feedScheduler.isFeedRunning(f.id)).length;
+        const unhealthyFeeds = feedList.filter((f) => (f.errorCount || 0) > 0).length;
         
         let puppeteerStatus = 'disconnected';
         let puppeteerError = '';
@@ -59,6 +60,7 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
                     total: feedList.length,
                     enabled: enabledFeeds,
                     running: runningFeeds,
+                    unhealthy: unhealthyFeeds,
                 },
                 puppeteer: {
                     status: puppeteerStatus,
@@ -288,6 +290,13 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
                 groups: body.groups || [],
                 customHtmlTemplate: body.customHtmlTemplate,
                 customForwardTemplate: body.customForwardTemplate,
+                keywordWhitelist: body.keywordWhitelist,
+                keywordBlacklist: body.keywordBlacklist,
+                keywordMatchMode: body.keywordMatchMode,
+                quietHoursEnabled: body.quietHoursEnabled,
+                quietHoursStart: body.quietHoursStart,
+                quietHoursEnd: body.quietHoursEnd,
+                batchWindowMinutes: body.batchWindowMinutes,
             };
 
             const initializedFeed = await rss.initializeFeedBaseline(feed);
@@ -325,6 +334,13 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
                 updateInterval: pluginState.config.defaultUpdateInterval,
                 sendMode: body.sendMode || pluginState.config.defaultSendMode,
                 groups: [],
+                keywordWhitelist: body.keywordWhitelist,
+                keywordBlacklist: body.keywordBlacklist,
+                keywordMatchMode: body.keywordMatchMode,
+                quietHoursEnabled: body.quietHoursEnabled,
+                quietHoursStart: body.quietHoursStart,
+                quietHoursEnd: body.quietHoursEnd,
+                batchWindowMinutes: body.batchWindowMinutes,
             };
 
             const result = await rss.testFeed(previewFeed);

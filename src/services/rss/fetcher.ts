@@ -16,10 +16,76 @@ export interface CheckResult {
     error?: string;
 }
 
-async function collectNewItems(feed: FeedConfig): Promise<FeedItem[]> {
+function buildItemFingerprint(item: FeedItem): string {
+    const fingerprintSource = [
+        item.link || '',
+        item.title || '',
+        String(item.pubDate || 0),
+        item.author || '',
+    ].join('|');
+
+    let hash = 0;
+    for (let i = 0; i < fingerprintSource.length; i++) {
+        hash = (hash * 31 + fingerprintSource.charCodeAt(i)) >>> 0;
+    }
+
+    return hash.toString(16);
+}
+
+function mergeFingerprints(existing: string[], items: FeedItem[]): string[] {
+    const next = new Set(existing);
+    for (const item of items) {
+        next.add(buildItemFingerprint(item));
+    }
+    return Array.from(next).slice(-50);
+}
+
+function matchesKeywordRules(feed: FeedConfig, item: FeedItem): boolean {
+    const whitelist = (feed.keywordWhitelist || []).map((keyword) => keyword.trim().toLowerCase()).filter(Boolean);
+    const blacklist = (feed.keywordBlacklist || []).map((keyword) => keyword.trim().toLowerCase()).filter(Boolean);
+
+    const haystack = [item.title, item.description, item.content, item.author, item.link]
+        .filter(Boolean)
+        .join('\n')
+        .toLowerCase();
+
+    if (blacklist.some((keyword) => haystack.includes(keyword))) {
+        return false;
+    }
+
+    if (whitelist.length === 0) {
+        return true;
+    }
+
+    if (feed.keywordMatchMode === 'all') {
+        return whitelist.every((keyword) => haystack.includes(keyword));
+    }
+
+    return whitelist.some((keyword) => haystack.includes(keyword));
+}
+
+async function collectNewItems(feed: FeedConfig): Promise<{ matchedItems: FeedItem[]; seenItems: FeedItem[] }> {
     const parsedFeed = await fetchAndParse(feed.url);
     const lastPubTime = feed.lastPublishTime || 0;
-    return parsedFeed.items.filter((item) => item.pubDate > lastPubTime);
+    const recentFingerprints = new Set(feed.recentItemFingerprints || []);
+
+    const seenItems = parsedFeed.items.filter((item) => {
+        const fingerprint = buildItemFingerprint(item);
+        if (recentFingerprints.has(fingerprint)) {
+            return false;
+        }
+
+        if (!item.pubDate || !lastPubTime) {
+            return true;
+        }
+
+        return item.pubDate >= lastPubTime;
+    });
+
+    return {
+        seenItems,
+        matchedItems: seenItems.filter((item) => matchesKeywordRules(feed, item)),
+    };
 }
 
 export async function checkFeedUpdate(feed: FeedConfig): Promise<CheckResult> {
@@ -31,23 +97,32 @@ export async function checkFeedUpdate(feed: FeedConfig): Promise<CheckResult> {
     };
 
     try {
-        const newItems = await collectNewItems(feed);
+        storage.markFeedCheckStart(feed.id);
+        const { matchedItems, seenItems } = await collectNewItems(feed);
 
-        if (newItems.length > 0) {
-            const latestPubDate = Math.max(...newItems.map((item) => item.pubDate));
+        if (seenItems.length > 0) {
+            const latestPubDate = Math.max(...seenItems.map((item) => item.pubDate));
             storage.updateFeedLastPublishTime(feed.id, latestPubDate);
-            storage.resetFeedErrorCount(feed.id);
-            
-            result.newItems = newItems;
+            storage.rememberFeedFingerprints(feed.id, mergeFingerprints(feed.recentItemFingerprints || [], seenItems));
+        }
+
+        if (matchedItems.length > 0) {
+            result.newItems = matchedItems;
             pluginState.logger.info(
-                `RSS 更新检测: ${feed.name} - 发现 ${newItems.length} 条新内容`
+                `RSS 更新检测: ${feed.name} - 发现 ${matchedItems.length} 条新内容`
             );
+        } else {
+            storage.markFeedCheckSuccess(feed.id);
+        }
+
+        if (matchedItems.length > 0) {
+            storage.markFeedCheckSuccess(feed.id, { errorCount: 0 });
         }
 
         result.success = true;
     } catch (error) {
-        storage.incrementFeedErrorCount(feed.id);
         result.error = error instanceof Error ? error.message : String(error);
+        storage.markFeedError(feed.id, result.error);
         pluginState.logger.error(`RSS 更新检测失败: ${feed.name} - ${result.error}`);
     }
 
@@ -63,7 +138,7 @@ export async function previewFeedUpdate(feed: FeedConfig): Promise<CheckResult> 
     };
 
     try {
-        result.newItems = await collectNewItems(feed);
+        result.newItems = (await collectNewItems(feed)).matchedItems;
         result.success = true;
     } catch (error) {
         result.error = error instanceof Error ? error.message : String(error);
@@ -78,15 +153,21 @@ export async function initializeFeedBaseline(feed: FeedConfig): Promise<FeedConf
         const latestPubDate = parsedFeed.items.reduce((max, item) => {
             return item.pubDate > max ? item.pubDate : max;
         }, 0);
+        const recentItemFingerprints = parsedFeed.items
+            .slice(0, 20)
+            .map((item) => buildItemFingerprint(item));
 
-        if (latestPubDate > 0) {
-            return {
-                ...feed,
-                lastPublishTime: latestPubDate,
-                lastUpdateTime: Date.now(),
-                errorCount: 0,
-            };
-        }
+        return {
+            ...feed,
+            recentItemFingerprints,
+            lastPublishTime: latestPubDate > 0 ? latestPubDate : feed.lastPublishTime,
+            lastCheckTime: Date.now(),
+            lastSuccessTime: Date.now(),
+            lastUpdateTime: latestPubDate > 0 ? Date.now() : feed.lastUpdateTime,
+            errorCount: 0,
+            lastError: undefined,
+            lastErrorTime: undefined,
+        };
     } catch (error) {
         pluginState.logger.warn(`初始化订阅基线失败: ${feed.name} - ${error}`);
     }

@@ -21,9 +21,40 @@ export interface FeedConfig {
     groups: string[];
     customHtmlTemplate?: string;
     customForwardTemplate?: string;
+    keywordWhitelist?: string[];
+    keywordBlacklist?: string[];
+    keywordMatchMode?: 'any' | 'all';
+    quietHoursEnabled?: boolean;
+    quietHoursStart?: string;
+    quietHoursEnd?: string;
+    batchWindowMinutes?: number;
+    recentItemFingerprints?: string[];
     lastPublishTime?: number;
+    lastCheckTime?: number;
     lastUpdateTime?: number;
+    lastSuccessTime?: number;
+    lastPushTime?: number;
+    lastPushCount?: number;
     errorCount?: number;
+    lastError?: string;
+    lastErrorTime?: number;
+    pendingItems?: FeedItem[];
+    pendingSince?: number;
+}
+
+export interface FeedRuntime {
+    recentItemFingerprints?: string[];
+    lastPublishTime?: number;
+    lastCheckTime?: number;
+    lastUpdateTime?: number;
+    lastSuccessTime?: number;
+    lastPushTime?: number;
+    lastPushCount?: number;
+    errorCount?: number;
+    lastError?: string;
+    lastErrorTime?: number;
+    pendingItems?: FeedItem[];
+    pendingSince?: number;
 }
 
 export interface Category {

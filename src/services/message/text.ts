@@ -3,9 +3,9 @@
  */
 
 import type { FeedItem, FeedConfig, OB11PostSendMsg } from '../../types';
-import type { OB11Message } from 'napcat-types/napcat-onebot';
 import type { NapCatPluginContext } from 'napcat-types/napcat-onebot/network/plugin/types';
 import { pluginState } from '../../core/state';
+import { formatItemTime, getItemSummary } from './utils';
 
 export async function sendSingle(
     feed: FeedConfig,
@@ -47,16 +47,17 @@ export async function sendGroupMessage(
 function buildTextMessage(feed: FeedConfig, item: FeedItem): Array<{ type: string; data: Record<string, string> }> {
     const lines: string[] = [
         `【${feed.name}】`,
-        `${item.title}`,
-        '',
+        item.title || '未命名内容',
     ];
 
-    if (item.description) {
-        lines.push(item.description.slice(0, 200));
+    const summary = getItemSummary(item, 220);
+    if (summary) {
         lines.push('');
+        lines.push(summary);
     }
 
     if (item.link) {
+        lines.push('');
         lines.push(`链接: ${item.link}`);
     }
 
@@ -64,9 +65,9 @@ function buildTextMessage(feed: FeedConfig, item: FeedItem): Array<{ type: strin
         lines.push(`作者: ${item.author}`);
     }
 
-    if (item.pubDate) {
-        const date = new Date(item.pubDate).toLocaleString('zh-CN');
-        lines.push(`发布时间: ${date}`);
+    const formattedTime = formatItemTime(item.pubDate);
+    if (formattedTime) {
+        lines.push(`发布时间: ${formattedTime}`);
     }
 
     return [{ type: 'text', data: { text: lines.join('\n') } }];

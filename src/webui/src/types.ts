@@ -13,10 +13,36 @@ export interface FeedConfig {
     groups: string[];
     customHtmlTemplate?: string;
     customForwardTemplate?: string;
+    keywordWhitelist?: string[];
+    keywordBlacklist?: string[];
+    keywordMatchMode?: 'any' | 'all';
+    quietHoursEnabled?: boolean;
+    quietHoursStart?: string;
+    quietHoursEnd?: string;
+    batchWindowMinutes?: number;
+    recentItemFingerprints?: string[];
     lastPublishTime?: number;
+    lastCheckTime?: number;
     lastUpdateTime?: number;
+    lastSuccessTime?: number;
+    lastPushTime?: number;
+    lastPushCount?: number;
     errorCount?: number;
+    lastError?: string;
+    lastErrorTime?: number;
+    pendingItems?: FeedItem[];
+    pendingSince?: number;
     isRunning?: boolean;
+}
+
+export interface FeedItem {
+    title: string;
+    link: string;
+    description?: string;
+    pubDate: number;
+    author?: string;
+    image?: string;
+    content?: string;
 }
 
 export interface Category {
@@ -41,6 +67,7 @@ export interface PluginStatus {
         total: number
         enabled: number
         running: number
+        unhealthy: number
     }
     puppeteer?: {
         status: string

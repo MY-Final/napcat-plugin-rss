@@ -215,91 +215,107 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {filteredFeeds.map((feed) => (
-                                    <tr 
-                                        key={feed.id} 
-                                        className="hover:bg-gray-50 dark:hover:bg-gray-800/30 cursor-pointer transition-colors"
-                                        onClick={() => handleViewDetail(feed)}
-                                    >
-                                        <td className="px-4 py-3">
-                                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                                            feed.enabled 
-                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' 
-                                                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                                        }`}>
-                                            {feed.enabled ? '运行中' : '已禁用'}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <div className="font-medium text-gray-900 dark:text-white">{feed.name}</div>
-                                        <div className="text-xs text-gray-400 truncate max-w-[200px]">{feed.url}</div>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm text-gray-600 dark:text-gray-300">
-                                            {feed.sendMode === 'forward' ? '📋 合并转发' : feed.sendMode === 'single' ? '📝 单条消息' : '🖼️ 图片渲染'}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm text-gray-600 dark:text-gray-300">{feed.groups.length} 个群</span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm text-gray-600 dark:text-gray-300">
-                                            {feed.updateInterval} 分钟
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                            <button 
-                                                onClick={() => handleCheck(feed)} 
-                                                className="p-1.5 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors"
-                                                title="检查更新"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                </svg>
-                                            </button>
-                                            <button 
-                                                onClick={() => handleToggle(feed)} 
-                                                className={`p-1.5 rounded-full transition-colors ${
-                                                    feed.enabled 
-                                                        ? 'hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-500' 
-                                                        : 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-500'
-                                                }`}
-                                                title={feed.enabled ? '禁用' : '启用'}
-                                            >
-                                                {feed.enabled ? (
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
-                                                ) : (
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
+                                {filteredFeeds.map((feed) => {
+                                    const isUnhealthy = (feed.errorCount || 0) > 0
+                                    const statusClass = !feed.enabled
+                                        ? 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                                        : isUnhealthy
+                                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                    const statusText = !feed.enabled ? '已禁用' : isUnhealthy ? '异常' : '运行中'
+
+                                    return (
+                                        <tr
+                                            key={feed.id}
+                                            className="hover:bg-gray-50 dark:hover:bg-gray-800/30 cursor-pointer transition-colors"
+                                            onClick={() => handleViewDetail(feed)}
+                                        >
+                                            <td className="px-4 py-3">
+                                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusClass}`}>
+                                                    {statusText}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="font-medium text-gray-900 dark:text-white">{feed.name}</div>
+                                                <div className="text-xs text-gray-400 truncate max-w-[200px]">{feed.url}</div>
+                                                {isUnhealthy && feed.lastError && (
+                                                    <div className="text-xs text-red-500 mt-1 truncate max-w-[240px]" title={feed.lastError}>
+                                                        最近错误: {feed.lastError}
+                                                    </div>
                                                 )}
-                                            </button>
-                                            <button 
-                                                onClick={() => handleEdit(feed)} 
-                                                className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors"
-                                                title="编辑"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                            </button>
-                                            <button 
-                                                onClick={() => setDeleteConfirm(feed)} 
-                                                className="p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 hover:text-red-500 transition-colors"
-                                                title="删除"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                                                {!isUnhealthy && feed.lastSuccessTime && (
+                                                    <div className="text-xs text-emerald-500 mt-1">
+                                                        最近成功: {new Date(feed.lastSuccessTime).toLocaleString('zh-CN')}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-sm text-gray-600 dark:text-gray-300">
+                                                    {feed.sendMode === 'forward' ? '📋 合并转发' : feed.sendMode === 'single' ? '📝 单条消息' : '🖼️ 图片渲染'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-sm text-gray-600 dark:text-gray-300">{feed.groups.length} 个群</span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-sm text-gray-600 dark:text-gray-300">
+                                                    {feed.updateInterval} 分钟
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                    <button
+                                                        onClick={() => handleCheck(feed)}
+                                                        className="p-1.5 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-500 transition-colors"
+                                                        title="检查更新"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleToggle(feed)}
+                                                        className={`p-1.5 rounded-full transition-colors ${
+                                                            feed.enabled
+                                                                ? 'hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-500'
+                                                                : 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-500'
+                                                        }`}
+                                                        title={feed.enabled ? '禁用' : '启用'}
+                                                    >
+                                                        {feed.enabled ? (
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                        ) : (
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                        )}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleEdit(feed)}
+                                                        className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors"
+                                                        title="编辑"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setDeleteConfirm(feed)}
+                                                        className="p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 hover:text-red-500 transition-colors"
+                                                        title="删除"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
                         </tbody>
                     </table>
                 </div>
@@ -440,10 +456,78 @@ function FeedDetailModal({
                         </div>
                     )}
 
+                    {feed.lastCheckTime && (
+                        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
+                            <label className="text-xs text-gray-400 uppercase font-medium">最近检查</label>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                                {new Date(feed.lastCheckTime).toLocaleString('zh-CN')}
+                            </p>
+                        </div>
+                    )}
+
+                    {feed.lastSuccessTime && (
+                        <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4">
+                            <label className="text-xs text-emerald-500 uppercase font-medium">最近成功</label>
+                            <p className="text-sm text-emerald-700 dark:text-emerald-300 mt-1">
+                                {new Date(feed.lastSuccessTime).toLocaleString('zh-CN')}
+                            </p>
+                        </div>
+                    )}
+
+                    {feed.lastPushTime && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
+                            <label className="text-xs text-blue-500 uppercase font-medium">最近推送</label>
+                            <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                                {new Date(feed.lastPushTime).toLocaleString('zh-CN')}
+                                {feed.lastPushCount ? ` · ${feed.lastPushCount} 条` : ''}
+                            </p>
+                        </div>
+                    )}
+
                     {feed.errorCount && feed.errorCount > 0 && (
                         <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4">
                             <label className="text-xs text-red-400 uppercase font-medium">错误次数</label>
                             <p className="text-sm text-red-600 dark:text-red-400 mt-1">{feed.errorCount} 次</p>
+                            {feed.lastError && (
+                                <p className="text-xs text-red-500 dark:text-red-300 mt-2 break-all">{feed.lastError}</p>
+                            )}
+                        </div>
+                    )}
+
+                    {((feed.keywordWhitelist && feed.keywordWhitelist.length > 0) || (feed.keywordBlacklist && feed.keywordBlacklist.length > 0)) && (
+                        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 md:col-span-2">
+                            <label className="text-xs text-purple-500 uppercase font-medium">关键词过滤</label>
+                            {feed.keywordWhitelist && feed.keywordWhitelist.length > 0 && (
+                                <p className="text-sm text-purple-700 dark:text-purple-300 mt-2">
+                                    白名单（{feed.keywordMatchMode === 'all' ? '全部命中' : '任意命中'}）: {feed.keywordWhitelist.join(' / ')}
+                                </p>
+                            )}
+                            {feed.keywordBlacklist && feed.keywordBlacklist.length > 0 && (
+                                <p className="text-sm text-purple-700 dark:text-purple-300 mt-2">
+                                    黑名单: {feed.keywordBlacklist.join(' / ')}
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    {(feed.quietHoursEnabled || (feed.batchWindowMinutes || 0) > 0 || (feed.pendingItems && feed.pendingItems.length > 0)) && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 md:col-span-2">
+                            <label className="text-xs text-blue-500 uppercase font-medium">通知节奏控制</label>
+                            {feed.quietHoursEnabled && (
+                                <p className="text-sm text-blue-700 dark:text-blue-300 mt-2">
+                                    静默时段: {feed.quietHoursStart || '--:--'} - {feed.quietHoursEnd || '--:--'}
+                                </p>
+                            )}
+                            {(feed.batchWindowMinutes || 0) > 0 && (
+                                <p className="text-sm text-blue-700 dark:text-blue-300 mt-2">
+                                    合并窗口: {feed.batchWindowMinutes} 分钟
+                                </p>
+                            )}
+                            {feed.pendingItems && feed.pendingItems.length > 0 && (
+                                <p className="text-sm text-blue-700 dark:text-blue-300 mt-2">
+                                    当前缓存: {feed.pendingItems.length} 条{feed.pendingSince ? `，起始于 ${new Date(feed.pendingSince).toLocaleString('zh-CN')}` : ''}
+                                </p>
+                            )}
                         </div>
                     )}
                 </div>
@@ -485,8 +569,20 @@ function FeedModal({
     const [groupSearch, setGroupSearch] = useState('')
     const [customHtml, setCustomHtml] = useState(feed?.customHtmlTemplate || '')
     const [customForward, setCustomForward] = useState(feed?.customForwardTemplate || '')
+    const [keywordWhitelist, setKeywordWhitelist] = useState((feed?.keywordWhitelist || []).join('\n'))
+    const [keywordBlacklist, setKeywordBlacklist] = useState((feed?.keywordBlacklist || []).join('\n'))
+    const [keywordMatchMode, setKeywordMatchMode] = useState<'any' | 'all'>(feed?.keywordMatchMode || 'any')
+    const [quietHoursEnabled, setQuietHoursEnabled] = useState(feed?.quietHoursEnabled ?? false)
+    const [quietHoursStart, setQuietHoursStart] = useState(feed?.quietHoursStart || '23:00')
+    const [quietHoursEnd, setQuietHoursEnd] = useState(feed?.quietHoursEnd || '08:00')
+    const [batchWindowMinutes, setBatchWindowMinutes] = useState(feed?.batchWindowMinutes || 0)
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const parseKeywords = (value: string) => value
+        .split(/\r?\n|,|，/)
+        .map((item) => item.trim())
+        .filter(Boolean)
 
     const autoName = url.startsWith('http') ? new URL(url).hostname : ''
 
@@ -503,6 +599,13 @@ function FeedModal({
             groups: selectedGroups,
             customHtmlTemplate: customHtml || undefined,
             customForwardTemplate: customForward || undefined,
+            keywordWhitelist: parseKeywords(keywordWhitelist).length > 0 ? parseKeywords(keywordWhitelist) : undefined,
+            keywordBlacklist: parseKeywords(keywordBlacklist).length > 0 ? parseKeywords(keywordBlacklist) : undefined,
+            keywordMatchMode,
+            quietHoursEnabled,
+            quietHoursStart: quietHoursEnabled ? quietHoursStart : undefined,
+            quietHoursEnd: quietHoursEnabled ? quietHoursEnd : undefined,
+            batchWindowMinutes: Math.max(0, batchWindowMinutes),
         })
     }
 
@@ -513,7 +616,13 @@ function FeedModal({
         try {
             const res = await noAuthFetch<{ title: string; itemCount: number }>('/feeds/validate', {
                 method: 'POST',
-                body: JSON.stringify({ url, name: 'test' })
+                body: JSON.stringify({
+                    url,
+                    name: 'test',
+                    keywordWhitelist: parseKeywords(keywordWhitelist),
+                    keywordBlacklist: parseKeywords(keywordBlacklist),
+                    keywordMatchMode,
+                })
             })
             if (res.code === 0) {
                 const itemCount = res.data?.itemCount ?? 0
@@ -687,6 +796,110 @@ required
                                     className="w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                                 />
                             </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">白名单关键词</label>
+                            <textarea
+                                value={keywordWhitelist}
+                                onChange={(e) => setKeywordWhitelist(e.target.value)}
+                                rows={4}
+                                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none"
+                                placeholder="每行一个关键词，命中后才推送"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">黑名单关键词</label>
+                            <textarea
+                                value={keywordBlacklist}
+                                onChange={(e) => setKeywordBlacklist(e.target.value)}
+                                rows={4}
+                                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none"
+                                placeholder="每行一个关键词，命中后跳过推送"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">白名单匹配方式</label>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setKeywordMatchMode('any')}
+                                className={`py-2 px-4 rounded-xl text-sm transition-colors ${
+                                    keywordMatchMode === 'any'
+                                        ? 'bg-purple-500 text-white'
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                }`}
+                            >
+                                任意命中
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setKeywordMatchMode('all')}
+                                className={`py-2 px-4 rounded-xl text-sm transition-colors ${
+                                    keywordMatchMode === 'all'
+                                        ? 'bg-purple-500 text-white'
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                }`}
+                            >
+                                全部命中
+                            </button>
+                        </div>
+                        <p className="mt-2 text-xs text-gray-400">白名单留空表示不过滤；黑名单优先级高于白名单。</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">静默时段</label>
+                                <input
+                                    type="checkbox"
+                                    checked={quietHoursEnabled}
+                                    onChange={(e) => setQuietHoursEnabled(e.target.checked)}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <div className="text-xs text-gray-400 mb-1">开始</div>
+                                    <input
+                                        type="time"
+                                        value={quietHoursStart}
+                                        onChange={(e) => setQuietHoursStart(e.target.value)}
+                                        disabled={!quietHoursEnabled}
+                                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 disabled:opacity-50"
+                                    />
+                                </div>
+                                <div>
+                                    <div className="text-xs text-gray-400 mb-1">结束</div>
+                                    <input
+                                        type="time"
+                                        value={quietHoursEnd}
+                                        onChange={(e) => setQuietHoursEnd(e.target.value)}
+                                        disabled={!quietHoursEnabled}
+                                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 disabled:opacity-50"
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-400">静默时段内的更新会先缓存，时段结束后再补发。</p>
+                        </div>
+
+                        <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">合并窗口</label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    value={batchWindowMinutes}
+                                    onChange={(e) => setBatchWindowMinutes(Math.max(0, Number(e.target.value) || 0))}
+                                    min={0}
+                                    max={1440}
+                                    className="w-24 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700"
+                                />
+                                <span className="text-sm text-gray-400">分钟</span>
+                            </div>
+                            <p className="text-xs text-gray-400">设置为 0 表示关闭。大于 0 时，窗口内的新内容会合并后统一推送。</p>
                         </div>
                     </div>
 

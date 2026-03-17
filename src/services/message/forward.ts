@@ -4,6 +4,7 @@
 
 import type { FeedItem, FeedConfig, ForwardNode } from '../../types';
 import { pluginState } from '../../core/state';
+import { formatItemTime, getItemSummary } from './utils';
 
 const DEFAULT_FORWARD_TEMPLATE = `【{feedName}】
 {title}
@@ -33,12 +34,8 @@ export async function sendForward(
 
 function buildForwardNode(feed: FeedConfig, item: FeedItem): ForwardNode {
     const template = feed.customForwardTemplate || DEFAULT_FORWARD_TEMPLATE;
-    
-    const desc = item.description && item.description.length > 300 
-        ? item.description.slice(0, 300) + '...'
-        : item.description || '';
-    
-    const time = item.pubDate ? new Date(item.pubDate).toLocaleString('zh-CN') : '';
+    const desc = getItemSummary(item, 300);
+    const time = formatItemTime(item.pubDate);
     
     const contentText = template
         .replace(/{feedName}/g, feed.name)
@@ -55,7 +52,7 @@ function buildForwardNode(feed: FeedConfig, item: FeedItem): ForwardNode {
         type: 'node',
         data: {
             nickname: feed.name,
-            user_id: '114514',
+            user_id: pluginState.selfId || '0',
             content,
         },
     };

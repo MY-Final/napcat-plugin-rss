@@ -12,6 +12,7 @@ interface ExtendedStatus extends PluginStatus {
         total: number
         enabled: number
         running: number
+        unhealthy: number
     }
     puppeteer?: {
         status: string
@@ -122,7 +123,7 @@ export default function StatusPage({ status, onRefresh }: StatusPageProps) {
 
                 {/* 订阅状态 */}
                 {extStatus?.feeds && (
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                         <div className="card p-4 text-center">
                             <div className="text-2xl font-bold text-emerald-500">{extStatus.feeds.enabled}</div>
                             <div className="text-xs text-gray-500 mt-1">已启用</div>
@@ -130,6 +131,10 @@ export default function StatusPage({ status, onRefresh }: StatusPageProps) {
                         <div className="card p-4 text-center">
                             <div className="text-2xl font-bold text-blue-500">{extStatus.feeds.running}</div>
                             <div className="text-xs text-gray-500 mt-1">运行中</div>
+                        </div>
+                        <div className="card p-4 text-center">
+                            <div className="text-2xl font-bold text-red-500">{extStatus.feeds.unhealthy}</div>
+                            <div className="text-xs text-gray-500 mt-1">异常订阅</div>
                         </div>
                     </div>
                 )}
