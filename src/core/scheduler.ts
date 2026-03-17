@@ -19,6 +19,19 @@ class FeedScheduler {
     private timers: Map<string, ReturnType<typeof setInterval>> = new Map();
     private runningFeeds: Set<string> = new Set();
     private timerIntervals: Map<string, number> = new Map();
+    private startupTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+    private get canUsePluginState(): boolean {
+        return pluginState.isInitialized;
+    }
+
+    private log(level: 'debug' | 'info' | 'warn' | 'error', message: string): void {
+        if (!this.canUsePluginState) {
+            return;
+        }
+
+        pluginState.logger[level](message);
+    }
 
     private getEffectiveIntervalMinutes(feed: FeedConfig): number {
         const baseInterval = Math.max(1, feed.updateInterval);
@@ -86,6 +99,10 @@ class FeedScheduler {
     }
 
     private refreshFeedSchedule(feedId: string): void {
+        if (!this.canUsePluginState) {
+            return;
+        }
+
         const feed = rss.getFeed(feedId);
         if (!feed || !feed.enabled || !pluginState.config.enabled) {
             this.stopFeed(feedId);
@@ -99,8 +116,12 @@ class FeedScheduler {
     }
 
     startAll(): void {
+        if (!this.canUsePluginState) {
+            return;
+        }
+
         if (!pluginState.config.enabled) {
-            pluginState.logger.info('RSS 插件已禁用，跳过调度器启动');
+            this.log('info', 'RSS 插件已禁用，跳过调度器启动');
             return;
         }
 
@@ -108,10 +129,14 @@ class FeedScheduler {
         for (const feed of feeds) {
             this.startFeed(feed);
         }
-        pluginState.logger.info(`RSS 调度器启动，共 ${feeds.length} 个订阅`);
+        this.log('info', `RSS 调度器启动，共 ${feeds.length} 个订阅`);
     }
 
     startFeed(feed: FeedConfig, immediate: boolean = true): void {
+        if (!this.canUsePluginState) {
+            return;
+        }
+
         if (!pluginState.config.enabled || !feed.enabled) {
             this.stopFeed(feed.id);
             return;
@@ -131,37 +156,54 @@ class FeedScheduler {
 
         this.timers.set(feed.id, timer);
         this.timerIntervals.set(feed.id, intervalMinutes);
-        pluginState.logger.debug(`启动 RSS 定时任务: ${feed.name} (间隔 ${intervalMinutes} 分钟)`);
+        this.log('debug', `启动 RSS 定时任务: ${feed.name} (间隔 ${intervalMinutes} 分钟)`);
 
         if (immediate) {
-            setTimeout(async () => {
+            const timeout = setTimeout(async () => {
+                this.startupTimeouts.delete(feed.id);
                 await this.checkUpdate(feed.id);
             }, 5000);
+            this.startupTimeouts.set(feed.id, timeout);
         }
     }
 
     stopFeed(feedId: string): void {
+        const timeout = this.startupTimeouts.get(feedId);
+        if (timeout) {
+            clearTimeout(timeout);
+            this.startupTimeouts.delete(feedId);
+        }
+
         const timer = this.timers.get(feedId);
         if (timer) {
             clearInterval(timer);
             this.timers.delete(feedId);
             this.timerIntervals.delete(feedId);
-            pluginState.logger.debug(`停止 RSS 定时任务: ${feedId}`);
+            this.log('debug', `停止 RSS 定时任务: ${feedId}`);
         }
     }
 
     stopAll(): void {
+        for (const timeout of this.startupTimeouts.values()) {
+            clearTimeout(timeout);
+        }
+        this.startupTimeouts.clear();
+
         for (const [feedId, timer] of this.timers) {
             clearInterval(timer);
-            pluginState.logger.debug(`停止 RSS 定时任务: ${feedId}`);
+            this.log('debug', `停止 RSS 定时任务: ${feedId}`);
         }
         this.timers.clear();
         this.timerIntervals.clear();
         this.runningFeeds.clear();
-        pluginState.logger.info('RSS 调度器已停止');
+        this.log('info', 'RSS 调度器已停止');
     }
 
     async checkUpdate(feedId: string): Promise<FeedItem[]> {
+        if (!this.canUsePluginState) {
+            return [];
+        }
+
         if (!pluginState.config.enabled) {
             return [];
         }
@@ -172,7 +214,7 @@ class FeedScheduler {
         }
 
         if (this.runningFeeds.has(feedId)) {
-            pluginState.logger.debug(`RSS 检查跳过，任务仍在执行: ${feed.name}`);
+            this.log('debug', `RSS 检查跳过，任务仍在执行: ${feed.name}`);
             return [];
         }
 
@@ -182,7 +224,7 @@ class FeedScheduler {
             const result = await rss.checkFeedUpdate(feed);
 
             if (!result.success) {
-                pluginState.logger.error(`RSS 检查失败: ${feed.name} - ${result.error}`);
+                this.log('error', `RSS 检查失败: ${feed.name} - ${result.error}`);
                 return [];
             }
 
@@ -193,21 +235,21 @@ class FeedScheduler {
                 return [];
             }
 
-            pluginState.logger.info(`RSS 更新: ${feed.name} - ${result.newItems.length} 条新内容`);
+            this.log('info', `RSS 更新: ${feed.name} - ${result.newItems.length} 条新内容`);
 
             const now = Date.now();
             const bufferedItems = this.mergeItems(feed.pendingItems || [], result.newItems);
 
             if (this.isQuietHours(feed)) {
                 storage.setPendingItems(feed.id, bufferedItems, feed.pendingSince || now);
-                pluginState.logger.info(`RSS 更新进入静默缓存: ${feed.name} - 暂存 ${bufferedItems.length} 条`);
+                this.log('info', `RSS 更新进入静默缓存: ${feed.name} - 暂存 ${bufferedItems.length} 条`);
                 return result.newItems;
             }
 
             const nextPendingSince = feed.pendingSince || now;
             if ((feed.batchWindowMinutes || 0) > 0 && this.shouldHoldForBatch(feed, nextPendingSince)) {
                 storage.setPendingItems(feed.id, bufferedItems, nextPendingSince);
-                pluginState.logger.info(`RSS 更新进入合并窗口: ${feed.name} - 暂存 ${bufferedItems.length} 条`);
+                this.log('info', `RSS 更新进入合并窗口: ${feed.name} - 暂存 ${bufferedItems.length} 条`);
                 return result.newItems;
             }
 
@@ -235,7 +277,7 @@ class FeedScheduler {
                     pluginState.incrementProcessed();
                     storage.markFeedPushSuccess(feed.id, itemsToSend.length);
                 } catch (error) {
-                    pluginState.logger.error(`推送失败: ${feed.name} -> 群 ${groupId}: ${error}`);
+                    this.log('error', `推送失败: ${feed.name} -> 群 ${groupId}: ${error}`);
                     storage.markFeedError(feed.id, error instanceof Error ? error.message : String(error));
                 }
             }
@@ -256,6 +298,10 @@ class FeedScheduler {
     private async flushPendingItems(feed: FeedConfig): Promise<FeedItem[]> {
         const pendingItems = feed.pendingItems || [];
         if (pendingItems.length === 0) {
+            return [];
+        }
+
+        if (!this.canUsePluginState) {
             return [];
         }
 
@@ -323,7 +369,7 @@ class FeedScheduler {
                         await message.sendPuppeteer(feed, groupId, item);
                     }
                 } catch (error) {
-                    pluginState.logger.warn(`Puppeteer 发送失败，回退为文本: ${feed.name} -> 群 ${groupId}`);
+                    this.log('warn', `Puppeteer 发送失败，回退为文本: ${feed.name} -> 群 ${groupId}`);
                     for (const item of items) {
                         await message.sendSingle(feed, groupId, item);
                     }

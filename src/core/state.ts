@@ -86,6 +86,10 @@ class PluginState {
     };
 
     /** 获取上下文（确保已初始化） */
+    get isInitialized(): boolean {
+        return this._ctx !== null;
+    }
+
     get ctx(): NapCatPluginContext {
         if (!this._ctx) throw new Error('PluginState 尚未初始化，请先调用 init()');
         return this._ctx;

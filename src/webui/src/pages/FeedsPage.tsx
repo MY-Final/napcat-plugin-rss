@@ -489,7 +489,7 @@ function FeedDetailModal({
                             <label className="text-xs text-red-400 uppercase font-medium">错误次数</label>
                             <p className="text-sm text-red-600 dark:text-red-400 mt-1">{feed.errorCount} 次</p>
                             {feed.lastError && (
-                                <p className="text-xs text-red-500 dark:text-red-300 mt-2 break-all">{feed.lastError}</p>
+                                <p className="text-xs text-red-500 dark:text-red-300 mt-2 break-all whitespace-pre-wrap">{feed.lastError}</p>
                             )}
                         </div>
                     )}
