@@ -5,7 +5,16 @@
 import type { FeedItem, FeedConfig } from '../../types';
 import { pluginState } from '../../core/state';
 import { puppeteerClient } from '../puppeteer/client';
-import { applyTemplate, buildVariables } from '../puppeteer/templates';
+import { applyTemplate } from '../puppeteer/templates';
+
+function hasBlockingRemoteScript(template?: string): boolean {
+    if (!template) {
+        return false;
+    }
+
+    const lowerTemplate = template.toLowerCase();
+    return lowerTemplate.includes('<script') || lowerTemplate.includes('tailwindcss.com');
+}
 
 export async function sendPuppeteer(
     feed: FeedConfig,
@@ -15,18 +24,18 @@ export async function sendPuppeteer(
     const ctx = pluginState.ctx;
     
     const html = applyTemplate(feed, item);
+
+    if (hasBlockingRemoteScript(feed.customHtmlTemplate)) {
+        pluginState.logger.warn(`自定义图片模板包含远程脚本，可能导致截图超时: ${feed.name}`);
+    }
     
     let imageBase64: string;
     try {
-        if (feed.customHtmlTemplate?.trim()) {
-            imageBase64 = await puppeteerClient.renderTemplate(feed.customHtmlTemplate, buildVariables(feed, item) as unknown as Record<string, unknown>);
-        } else {
-            imageBase64 = await puppeteerClient.renderHtml(html, {
-                type: 'png',
-                fullPage: false,
-                setViewport: { width: 600, height: 400, deviceScaleFactor: 2 },
-            });
-        }
+        imageBase64 = await puppeteerClient.renderHtml(html, {
+            type: 'png',
+            fullPage: false,
+            setViewport: { width: 600, height: 400, deviceScaleFactor: 2 },
+        });
     } catch (error) {
         pluginState.logger.error(`Puppeteer 渲染失败: ${error}`);
         throw error;
