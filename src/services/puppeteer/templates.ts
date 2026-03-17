@@ -122,7 +122,7 @@ export const DEFAULT_TEMPLATE = `<!DOCTYPE html>
         <header class="banner">
             <div class="feed-name">{{feedName}}</div>
             <h1 class="title">{{title}}</h1>
-            <div class="meta">{{#if author}}{{author}}{{/if}}{{#if author}}{{#if pubDate}} · {{/if}}{{/if}}{{pubDate}}</div>
+            {{#if metaLine}}<div class="meta">{{metaLine}}</div>{{/if}}
         </header>
         <section class="content">
             {{#if image}}
@@ -146,6 +146,9 @@ export const DEFAULT_TEMPLATE = `<!DOCTYPE html>
 </html>`;
 
 export function buildVariables(feed: FeedConfig, item: FeedItem): TemplateVariables {
+    const formattedDate = formatDate(item.pubDate);
+    const metaLine = [item.author || '', formattedDate].filter(Boolean).join(' · ');
+
     return {
         feedName: feed.name,
         feedUrl: feed.url,
@@ -154,7 +157,8 @@ export function buildVariables(feed: FeedConfig, item: FeedItem): TemplateVariab
         description: getItemSummary(item, 420),
         content: getItemSummary(item, 800),
         author: item.author || '',
-        pubDate: formatDate(item.pubDate),
+        pubDate: formattedDate,
+        metaLine,
         image: item.image || '',
         timestamp: item.pubDate,
     };

@@ -154,6 +154,7 @@ export interface TemplateVariables {
     content: string;
     author: string;
     pubDate: string;
+    metaLine: string;
     image: string;
     timestamp: number;
 }

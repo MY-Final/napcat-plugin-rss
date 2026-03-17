@@ -28,6 +28,8 @@ export async function parseFeed(xml: string): Promise<ParsedFeed> {
     const items: FeedItem[] = feed.items.map((item) => {
         const rawItem = item as typeof item & {
             author?: string;
+            isoDate?: string;
+            updated?: string;
             'media:content'?: { $?: { url?: string } };
             'media:thumbnail'?: { $?: { url?: string } };
         };
@@ -47,8 +49,9 @@ export async function parseFeed(xml: string): Promise<ParsedFeed> {
         }
 
         let pubDate = 0;
-        if (item.pubDate) {
-            pubDate = new Date(item.pubDate).getTime();
+        const timeCandidate = item.pubDate || rawItem.isoDate || rawItem.updated;
+        if (timeCandidate) {
+            pubDate = new Date(timeCandidate).getTime();
         }
 
         return {
