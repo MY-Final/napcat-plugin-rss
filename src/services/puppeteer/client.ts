@@ -83,6 +83,41 @@ export class PuppeteerClient {
         });
     }
 
+    async renderTemplate(html: string, data: Record<string, unknown>): Promise<string> {
+        const url = `${this.endpoint}/plugin/napcat-plugin-puppeteer/api/render`;
+
+        pluginState.logger.debug(`Puppeteer render template: ${html.slice(0, 100)}`);
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                html,
+                data,
+                encoding: 'base64',
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Puppeteer HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+        }
+
+        const result: ScreenshotResponse = await response.json();
+
+        if (result.code !== 0) {
+            throw new Error(result.message || 'Puppeteer 模板渲染失败');
+        }
+
+        if (!result.data) {
+            throw new Error('Puppeteer 返回数据为空');
+        }
+
+        return result.data;
+    }
+
     async checkStatus(): Promise<boolean> {
         try {
             const url = `${this.endpoint}/plugin/napcat-plugin-puppeteer/api/status`;

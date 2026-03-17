@@ -5,7 +5,7 @@
 import type { FeedItem, FeedConfig } from '../../types';
 import { pluginState } from '../../core/state';
 import { puppeteerClient } from '../puppeteer/client';
-import { applyTemplate } from '../puppeteer/templates';
+import { applyTemplate, buildVariables } from '../puppeteer/templates';
 
 export async function sendPuppeteer(
     feed: FeedConfig,
@@ -18,11 +18,15 @@ export async function sendPuppeteer(
     
     let imageBase64: string;
     try {
-        imageBase64 = await puppeteerClient.renderHtml(html, {
-            type: 'png',
-            fullPage: false,
-            setViewport: { width: 600, height: 400, deviceScaleFactor: 2 },
-        });
+        if (feed.customHtmlTemplate?.trim()) {
+            imageBase64 = await puppeteerClient.renderTemplate(feed.customHtmlTemplate, buildVariables(feed, item) as unknown as Record<string, unknown>);
+        } else {
+            imageBase64 = await puppeteerClient.renderHtml(html, {
+                type: 'png',
+                fullPage: false,
+                setViewport: { width: 600, height: 400, deviceScaleFactor: 2 },
+            });
+        }
     } catch (error) {
         pluginState.logger.error(`Puppeteer 渲染失败: ${error}`);
         throw error;

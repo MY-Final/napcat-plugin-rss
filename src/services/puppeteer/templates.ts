@@ -4,7 +4,6 @@
  */
 
 import type { TemplateVariables, FeedItem, FeedConfig } from '../../types';
-import { pluginState } from '../../core/state';
 import { getItemSummary } from '../message/utils';
 
 export const DEFAULT_TEMPLATE = `<!DOCTYPE html>
@@ -222,25 +221,7 @@ function escapeHtml(text: string): string {
 }
 
 export function applyTemplate(feed: FeedConfig, item: FeedItem): string {
-    const template = pickTemplate(feed);
+    const template = feed.customHtmlTemplate?.trim() || DEFAULT_TEMPLATE;
     const vars = buildVariables(feed, item);
     return renderTemplate(template, vars);
-}
-
-function pickTemplate(feed: FeedConfig): string {
-    const customTemplate = feed.customHtmlTemplate?.trim();
-    if (!customTemplate) {
-        return DEFAULT_TEMPLATE;
-    }
-
-    const lowerTemplate = customTemplate.toLowerCase();
-    const hasRemoteScript = lowerTemplate.includes('<script') || lowerTemplate.includes('tailwindcss.com');
-    const hasRemoteFont = lowerTemplate.includes('fonts.googleapis.com') || lowerTemplate.includes('fonts.gstatic.com');
-
-    if (hasRemoteScript || hasRemoteFont) {
-        pluginState.logger.warn(`检测到不稳定的自定义图片模板，已回退到内置模板: ${feed.name}`);
-        return DEFAULT_TEMPLATE;
-    }
-
-    return customTemplate;
 }
