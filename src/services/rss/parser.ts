@@ -5,9 +5,9 @@
 
 import http from 'node:http';
 import https from 'node:https';
-import net from 'node:net';
-import tls from 'node:tls';
 import { URL } from 'node:url';
+import { HttpProxyAgent } from 'http-proxy-agent';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import Parser from 'rss-parser';
 import type { ParsedFeed, FeedItem } from '../../types';
 import { pluginState } from '../../core/state';
@@ -155,111 +155,34 @@ function requestViaProxy(url: URL, proxyUrl: string, timeoutMs: number): Promise
         throw new Error(`代理协议暂仅支持 http，当前为: ${proxy.protocol}`);
     }
 
-    if (url.protocol === 'http:') {
-        return new Promise((resolve, reject) => {
-            const req = http.request({
-                host: proxy.hostname,
-                port: Number(proxy.port || 80),
-                method: 'GET',
-                path: url.toString(),
-                headers: {
-                    Host: url.host,
-                    'User-Agent': 'NapCat-RSS-Plugin/1.0',
-                    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-                },
-            }, (res) => {
-                if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
-                    reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage || '请求失败'}`));
-                    res.resume();
-                    return;
-                }
-
-                const chunks: Buffer[] = [];
-                res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-                res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-            });
-
-            req.setTimeout(timeoutMs, () => req.destroy(new Error('timeout')));
-            req.on('error', (error) => reject(new Error(`proxy http request failed: ${error.message}`)));
-            req.end();
-        });
-    }
-
     return new Promise((resolve, reject) => {
-        const proxySocket = net.connect(Number(proxy.port || 80), proxy.hostname);
-        const timeout = setTimeout(() => {
-            proxySocket.destroy(new Error('proxy timeout during CONNECT'));
-        }, timeoutMs);
+        const client = url.protocol === 'https:' ? https : http;
+        const agent = url.protocol === 'https:'
+            ? new HttpsProxyAgent(proxyUrl)
+            : new HttpProxyAgent(proxyUrl);
 
-        proxySocket.on('connect', () => {
-            const connectRequest = [
-                `CONNECT ${url.hostname}:${url.port || 443} HTTP/1.1`,
-                `Host: ${url.hostname}:${url.port || 443}`,
-                'Connection: Keep-Alive',
-                'Proxy-Connection: Keep-Alive',
-                '',
-                '',
-            ].join('\r\n');
-            proxySocket.write(connectRequest);
-        });
-
-        proxySocket.once('error', (error) => {
-            clearTimeout(timeout);
-            reject(new Error(`proxy connect failed: ${error.message}`));
-        });
-
-        proxySocket.once('data', (chunk) => {
-            const response = chunk.toString('utf-8');
-            if (!response.includes('200 Connection established')) {
-                clearTimeout(timeout);
-                proxySocket.destroy();
-                reject(new Error(`proxy tunnel failed: ${response.split('\r\n')[0] || response}`));
+        const req = client.request(url, {
+            method: 'GET',
+            headers: {
+                'User-Agent': 'NapCat-RSS-Plugin/1.0',
+                'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+            },
+            agent,
+        }, (res) => {
+            if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+                reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage || '请求失败'}`));
+                res.resume();
                 return;
             }
 
-            const tlsSocket = tls.connect({
-                socket: proxySocket,
-                servername: url.hostname,
-            }, () => {
-                const req = https.request({
-                    host: url.hostname,
-                    port: Number(url.port || 443),
-                    path: `${url.pathname}${url.search}`,
-                    method: 'GET',
-                    headers: {
-                        Host: url.host,
-                        'User-Agent': 'NapCat-RSS-Plugin/1.0',
-                        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-                    },
-                    createConnection: () => tlsSocket,
-                    agent: false,
-                }, (res) => {
-                    clearTimeout(timeout);
-
-                    if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
-                        reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage || '请求失败'}`));
-                        res.resume();
-                        return;
-                    }
-
-                    const chunks: Buffer[] = [];
-                    res.on('data', (data) => chunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data)));
-                    res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-                });
-
-                req.setTimeout(timeoutMs, () => req.destroy(new Error('proxy timeout during tunneled request')));
-                req.on('error', (error) => {
-                    clearTimeout(timeout);
-                    reject(error);
-                });
-                req.end();
-            });
-
-            tlsSocket.on('error', (error) => {
-                clearTimeout(timeout);
-                reject(error);
-            });
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+            res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
         });
+
+        req.setTimeout(timeoutMs, () => req.destroy(new Error('proxy timeout')));
+        req.on('error', (error) => reject(new Error(`proxy request failed: ${error.message}`)));
+        req.end();
     });
 }
 
