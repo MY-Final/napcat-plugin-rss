@@ -7,6 +7,9 @@ import { IconTerminal, IconSettings } from '../components/icons'
 export default function ConfigPage() {
     const [config, setConfig] = useState<PluginConfig | null>(null)
     const [saving, setSaving] = useState(false)
+    const [testingProxy, setTestingProxy] = useState(false)
+    const [proxyTestTarget, setProxyTestTarget] = useState('https://github.com/Radiant303.atom')
+    const [proxyTestResult, setProxyTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
     const fetchConfig = useCallback(async () => {
         try {
@@ -41,6 +44,37 @@ export default function ConfigPage() {
         setConfig(updated)
         saveConfig({ [key]: value })
     }
+
+    const testProxy = useCallback(async () => {
+        if (!config) return
+        setTestingProxy(true)
+        setProxyTestResult(null)
+
+        try {
+            const res = await noAuthFetch<{ contentLength: number; mode: string; targetUrl: string }>('/config/test-proxy', {
+                method: 'POST',
+                body: JSON.stringify({
+                    proxyUrl: config.rssProxyUrl,
+                    targetUrl: proxyTestTarget,
+                }),
+            })
+
+            if (res.code === 0 && res.data) {
+                setProxyTestResult({
+                    success: true,
+                    message: `${res.data.mode === 'proxy' ? '代理' : '直连'}测试成功，已获取 ${res.data.contentLength} 字节响应`,
+                })
+                showToast('RSS 抓取测试成功', 'success')
+            } else {
+                setProxyTestResult({ success: false, message: res.message || '测试失败' })
+            }
+        } catch (e: any) {
+            setProxyTestResult({ success: false, message: e.message || '测试失败' })
+            showToast('RSS 抓取测试失败', 'error')
+        } finally {
+            setTestingProxy(false)
+        }
+    }, [config, proxyTestTarget])
 
     if (!config) {
         return (
@@ -155,6 +189,39 @@ export default function ConfigPage() {
                         value={config.puppeteerEndpoint}
                         onChange={(v) => updateField('puppeteerEndpoint', v)}
                     />
+                    <InputRow
+                        label="RSS 抓取代理地址"
+                        desc="可选。填写 HTTP 代理地址，例如 http://127.0.0.1:7890；留空则直连"
+                        value={config.rssProxyUrl}
+                        onChange={(v) => updateField('rssProxyUrl', v)}
+                    />
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/60 p-4 space-y-3">
+                        <div>
+                            <div className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">代理连通性测试</div>
+                            <div className="text-xs text-gray-400">用于确认当前是否能通过代理或直连抓到指定 RSS 地址</div>
+                        </div>
+                        <input
+                            className="input-field"
+                            value={proxyTestTarget}
+                            onChange={(e) => setProxyTestTarget(e.target.value)}
+                            placeholder="https://github.com/Radiant303.atom"
+                        />
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={testProxy}
+                                disabled={testingProxy || !proxyTestTarget}
+                                className="btn-primary rounded-full px-5 disabled:opacity-50"
+                            >
+                                {testingProxy ? '测试中...' : (config.rssProxyUrl ? '测试代理抓取' : '测试直连抓取')}
+                            </button>
+                            {proxyTestResult && (
+                                <div className={`text-xs px-3 py-2 rounded-lg ${proxyTestResult.success ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
+                                    {proxyTestResult.message}
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
 

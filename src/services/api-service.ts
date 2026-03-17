@@ -11,6 +11,7 @@ import { feedScheduler } from '../core/scheduler';
 import type { FeedConfig, SendMode, Category } from '../types';
 import { DEFAULT_TEMPLATE, applyTemplate } from './puppeteer/templates';
 import { puppeteerClient } from './puppeteer/client';
+import { testProxyConnection } from './rss/parser';
 
 function generateCategoryId(): string {
     return 'cat_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
@@ -315,6 +316,28 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
             });
         } catch (err) {
             ctx.logger.error('添加订阅失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.postNoAuth('/config/test-proxy', async (req, res) => {
+        try {
+            const body = req.body as { proxyUrl?: string; targetUrl?: string } | undefined;
+            const proxyUrl = body?.proxyUrl?.trim() || '';
+            const targetUrl = body?.targetUrl?.trim() || 'https://github.com/Radiant303.atom';
+
+            const result = await testProxyConnection(targetUrl, proxyUrl || undefined);
+            res.json({
+                code: 0,
+                data: {
+                    ...result,
+                    targetUrl,
+                    proxyUrl,
+                    mode: proxyUrl ? 'proxy' : 'direct',
+                },
+            });
+        } catch (err) {
+            ctx.logger.error('测试 RSS 代理失败:', err);
             res.status(500).json({ code: -1, message: String(err) });
         }
     });

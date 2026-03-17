@@ -92,6 +92,7 @@ export interface PluginConfig {
     defaultSendMode: SendMode;
     defaultUpdateInterval: number;
     puppeteerEndpoint: string;
+    rssProxyUrl: string;
 }
 
 export interface GroupConfig {

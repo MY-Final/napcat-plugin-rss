@@ -38,6 +38,7 @@ function sanitizeConfig(raw: unknown): PluginConfig {
     if (typeof raw.defaultSendMode === 'string') out.defaultSendMode = raw.defaultSendMode as 'single' | 'forward' | 'puppeteer';
     if (typeof raw.defaultUpdateInterval === 'number') out.defaultUpdateInterval = raw.defaultUpdateInterval;
     if (typeof raw.puppeteerEndpoint === 'string') out.puppeteerEndpoint = raw.puppeteerEndpoint;
+    if (typeof raw.rssProxyUrl === 'string') out.rssProxyUrl = raw.rssProxyUrl;
 
     if (isObject(raw.groupConfigs)) {
         for (const [groupId, groupConfig] of Object.entries(raw.groupConfigs)) {

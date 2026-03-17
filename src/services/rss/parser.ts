@@ -3,6 +3,11 @@
  * 使用 rss-parser 库解析 RSS/Atom/RDF
  */
 
+import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
+import tls from 'node:tls';
+import { URL } from 'node:url';
 import Parser from 'rss-parser';
 import type { ParsedFeed, FeedItem } from '../../types';
 import { pluginState } from '../../core/state';
@@ -15,9 +20,11 @@ const parser = new Parser({
     timeout: 10000,
 } as ConstructorParameters<typeof Parser>[0]);
 
+const RSS_FETCH_TIMEOUT_MS = 20000;
+
 export async function parseFeed(xml: string): Promise<ParsedFeed> {
     const feed = await parser.parseString(xml);
-    
+
     const items: FeedItem[] = feed.items.map((item) => {
         const rawItem = item as typeof item & {
             author?: string;
@@ -25,7 +32,7 @@ export async function parseFeed(xml: string): Promise<ParsedFeed> {
             'media:thumbnail'?: { $?: { url?: string } };
         };
         let image: string | undefined;
-        
+
         if (item.enclosure?.url) {
             image = item.enclosure.url;
         } else if (rawItem['media:content']?.$?.url) {
@@ -70,11 +77,13 @@ function stripHtml(html: string): string {
 function classifyFetchError(url: string, error: unknown): Error {
     if (error instanceof Error) {
         const message = error.message || '';
-        const cause = (error as Error & { cause?: { code?: string; message?: string } }).cause;
-        const causeCode = cause?.code || '';
-        const normalized = `${message} ${causeCode}`.toLowerCase();
+        const normalized = message.toLowerCase();
 
-        if (normalized.includes('aborted') || normalized.includes('timeout')) {
+        if (normalized.includes('proxy timeout')) {
+            return new Error(`代理请求超时，请检查代理地址、端口、Allow LAN 和防火墙配置: ${message}`);
+        }
+
+        if (normalized.includes('timeout')) {
             return new Error(`请求超时，请检查目标站点响应速度: ${url}`);
         }
 
@@ -94,6 +103,10 @@ function classifyFetchError(url: string, error: unknown): Error {
             return new Error(`TLS/证书校验失败，请检查目标站点 HTTPS 配置: ${url}`);
         }
 
+        if (normalized.includes('proxy')) {
+            return new Error(`代理请求失败，请检查代理地址和连通性: ${message}`);
+        }
+
         if (normalized.includes('fetch failed')) {
             return new Error(`抓取失败，可能是网络异常、源站不可达或被目标站点拦截: ${url}`);
         }
@@ -104,23 +117,167 @@ function classifyFetchError(url: string, error: unknown): Error {
     return new Error(`抓取失败: ${String(error)}`);
 }
 
-export async function fetchAndParse(url: string): Promise<ParsedFeed> {
-    pluginState.logger.debug(`Fetching RSS: ${url}`);
+function requestDirect(url: URL, timeoutMs: number): Promise<string> {
+    const client = url.protocol === 'https:' ? https : http;
 
-    try {
-        const response = await fetch(url, {
+    return new Promise((resolve, reject) => {
+        const req = client.request(url, {
+            method: 'GET',
             headers: {
                 'User-Agent': 'NapCat-RSS-Plugin/1.0',
                 'Accept': 'application/rss+xml, application/xml, text/xml, */*',
             },
-            signal: AbortSignal.timeout(10000),
+        }, (res) => {
+            if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+                reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage || '请求失败'}`));
+                res.resume();
+                return;
+            }
+
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+            res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
+        req.setTimeout(timeoutMs, () => req.destroy(new Error('timeout')));
+        req.on('error', reject);
+        req.end();
+    });
+}
 
-        const xml = await response.text();
+function requestViaProxy(url: URL, proxyUrl: string, timeoutMs: number): Promise<string> {
+    const proxy = new URL(proxyUrl);
+
+    if (proxy.protocol !== 'http:') {
+        throw new Error(`代理协议暂仅支持 http，当前为: ${proxy.protocol}`);
+    }
+
+    if (url.protocol === 'http:') {
+        return new Promise((resolve, reject) => {
+            const req = http.request({
+                host: proxy.hostname,
+                port: Number(proxy.port || 80),
+                method: 'GET',
+                path: url.toString(),
+                headers: {
+                    Host: url.host,
+                    'User-Agent': 'NapCat-RSS-Plugin/1.0',
+                    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+                },
+            }, (res) => {
+                if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+                    reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage || '请求失败'}`));
+                    res.resume();
+                    return;
+                }
+
+                const chunks: Buffer[] = [];
+                res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+                res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+            });
+
+            req.setTimeout(timeoutMs, () => req.destroy(new Error('timeout')));
+            req.on('error', (error) => reject(new Error(`proxy http request failed: ${error.message}`)));
+            req.end();
+        });
+    }
+
+    return new Promise((resolve, reject) => {
+        const proxySocket = net.connect(Number(proxy.port || 80), proxy.hostname);
+        const timeout = setTimeout(() => {
+            proxySocket.destroy(new Error('proxy timeout during CONNECT'));
+        }, timeoutMs);
+
+        proxySocket.on('connect', () => {
+            const connectRequest = [
+                `CONNECT ${url.hostname}:${url.port || 443} HTTP/1.1`,
+                `Host: ${url.hostname}:${url.port || 443}`,
+                'Connection: Keep-Alive',
+                'Proxy-Connection: Keep-Alive',
+                '',
+                '',
+            ].join('\r\n');
+            proxySocket.write(connectRequest);
+        });
+
+        proxySocket.once('error', (error) => {
+            clearTimeout(timeout);
+            reject(new Error(`proxy connect failed: ${error.message}`));
+        });
+
+        proxySocket.once('data', (chunk) => {
+            const response = chunk.toString('utf-8');
+            if (!response.includes('200 Connection established')) {
+                clearTimeout(timeout);
+                proxySocket.destroy();
+                reject(new Error(`proxy tunnel failed: ${response.split('\r\n')[0] || response}`));
+                return;
+            }
+
+            const tlsSocket = tls.connect({
+                socket: proxySocket,
+                servername: url.hostname,
+            }, () => {
+                const req = https.request({
+                    host: url.hostname,
+                    port: Number(url.port || 443),
+                    path: `${url.pathname}${url.search}`,
+                    method: 'GET',
+                    headers: {
+                        Host: url.host,
+                        'User-Agent': 'NapCat-RSS-Plugin/1.0',
+                        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+                    },
+                    createConnection: () => tlsSocket,
+                    agent: false,
+                }, (res) => {
+                    clearTimeout(timeout);
+
+                    if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+                        reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage || '请求失败'}`));
+                        res.resume();
+                        return;
+                    }
+
+                    const chunks: Buffer[] = [];
+                    res.on('data', (data) => chunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data)));
+                    res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+                });
+
+                req.setTimeout(timeoutMs, () => req.destroy(new Error('proxy timeout during tunneled request')));
+                req.on('error', (error) => {
+                    clearTimeout(timeout);
+                    reject(error);
+                });
+                req.end();
+            });
+
+            tlsSocket.on('error', (error) => {
+                clearTimeout(timeout);
+                reject(error);
+            });
+        });
+    });
+}
+
+export async function fetchXml(url: string, proxyUrlOverride?: string): Promise<string> {
+    const targetUrl = new URL(url);
+    const proxyUrl = (proxyUrlOverride ?? pluginState.config.rssProxyUrl)?.trim();
+    const timeoutMs = RSS_FETCH_TIMEOUT_MS;
+
+    if (!proxyUrl) {
+        return requestDirect(targetUrl, timeoutMs);
+    }
+
+    pluginState.logger.info(`RSS 抓取使用代理: ${proxyUrl}`);
+    return requestViaProxy(targetUrl, proxyUrl, timeoutMs);
+}
+
+export async function fetchAndParse(url: string): Promise<ParsedFeed> {
+    pluginState.logger.debug(`Fetching RSS: ${url}`);
+
+    try {
+        const xml = await fetchXml(url);
         if (!xml.trim()) {
             throw new Error('RSS 响应为空');
         }
@@ -132,5 +289,17 @@ export async function fetchAndParse(url: string): Promise<ParsedFeed> {
         }
     } catch (error) {
         throw classifyFetchError(url, error);
+    }
+}
+
+export async function testProxyConnection(targetUrl: string, proxyUrl?: string): Promise<{ ok: boolean; contentLength: number }> {
+    try {
+        const xml = await fetchXml(targetUrl, proxyUrl);
+        return {
+            ok: true,
+            contentLength: xml.length,
+        };
+    } catch (error) {
+        throw classifyFetchError(targetUrl, error);
     }
 }

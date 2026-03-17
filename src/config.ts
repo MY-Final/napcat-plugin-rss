@@ -17,6 +17,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
     defaultSendMode: 'forward',
     defaultUpdateInterval: 30,
     puppeteerEndpoint: 'http://127.0.0.1:6099',
+    rssProxyUrl: '',
 };
 
 export function buildConfigSchema(ctx: NapCatPluginContext): PluginConfigSchema {
