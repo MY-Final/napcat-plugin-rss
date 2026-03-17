@@ -23,6 +23,7 @@ import { pluginState } from './core/state';
 import { feedScheduler } from './core/scheduler';
 import { handleMessage } from './handlers/message-handler';
 import { registerApiRoutes } from './services/api-service';
+import { puppeteerClient } from './services/puppeteer/client';
 import type { PluginConfig } from './types';
 
 export let plugin_config_ui: PluginConfigSchema = [];
@@ -30,6 +31,7 @@ export let plugin_config_ui: PluginConfigSchema = [];
 export const plugin_init: PluginModule['plugin_init'] = async (ctx) => {
     try {
         pluginState.init(ctx);
+        puppeteerClient.setEndpoint(pluginState.config.puppeteerEndpoint);
 
         ctx.logger.info('RSS 插件初始化中...');
 
@@ -72,6 +74,7 @@ export const plugin_get_config: PluginModule['plugin_get_config'] = async (ctx) 
 
 export const plugin_set_config: PluginModule['plugin_set_config'] = async (ctx, config) => {
     pluginState.replaceConfig(config as PluginConfig);
+    syncSchedulerState();
     ctx.logger.info('配置已通过 WebUI 更新');
 };
 
@@ -80,11 +83,24 @@ export const plugin_on_config_change: PluginModule['plugin_on_config_change'] = 
 ) => {
     try {
         pluginState.updateConfig({ [key]: value });
+        syncSchedulerState();
         ctx.logger.debug(`配置项 ${key} 已更新`);
     } catch (err) {
         ctx.logger.error(`更新配置项 ${key} 失败:`, err);
     }
 };
+
+function syncSchedulerState(): void {
+    puppeteerClient.setEndpoint(pluginState.config.puppeteerEndpoint);
+
+    if (!pluginState.config.enabled) {
+        feedScheduler.stopAll();
+        return;
+    }
+
+    feedScheduler.stopAll();
+    feedScheduler.startAll();
+}
 
 function registerWebUI(ctx: NapCatPluginContext): void {
     const router = ctx.router;

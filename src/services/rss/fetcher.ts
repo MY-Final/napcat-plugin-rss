@@ -16,6 +16,12 @@ export interface CheckResult {
     error?: string;
 }
 
+async function collectNewItems(feed: FeedConfig): Promise<FeedItem[]> {
+    const parsedFeed = await fetchAndParse(feed.url);
+    const lastPubTime = feed.lastPublishTime || 0;
+    return parsedFeed.items.filter((item) => item.pubDate > lastPubTime);
+}
+
 export async function checkFeedUpdate(feed: FeedConfig): Promise<CheckResult> {
     const result: CheckResult = {
         feedId: feed.id,
@@ -25,10 +31,7 @@ export async function checkFeedUpdate(feed: FeedConfig): Promise<CheckResult> {
     };
 
     try {
-        const parsedFeed = await fetchAndParse(feed.url);
-        
-        const lastPubTime = feed.lastPublishTime || 0;
-        const newItems = parsedFeed.items.filter((item) => item.pubDate > lastPubTime);
+        const newItems = await collectNewItems(feed);
 
         if (newItems.length > 0) {
             const latestPubDate = Math.max(...newItems.map((item) => item.pubDate));
@@ -49,6 +52,46 @@ export async function checkFeedUpdate(feed: FeedConfig): Promise<CheckResult> {
     }
 
     return result;
+}
+
+export async function previewFeedUpdate(feed: FeedConfig): Promise<CheckResult> {
+    const result: CheckResult = {
+        feedId: feed.id,
+        feedName: feed.name,
+        newItems: [],
+        success: false,
+    };
+
+    try {
+        result.newItems = await collectNewItems(feed);
+        result.success = true;
+    } catch (error) {
+        result.error = error instanceof Error ? error.message : String(error);
+    }
+
+    return result;
+}
+
+export async function initializeFeedBaseline(feed: FeedConfig): Promise<FeedConfig> {
+    try {
+        const parsedFeed = await fetchAndParse(feed.url);
+        const latestPubDate = parsedFeed.items.reduce((max, item) => {
+            return item.pubDate > max ? item.pubDate : max;
+        }, 0);
+
+        if (latestPubDate > 0) {
+            return {
+                ...feed,
+                lastPublishTime: latestPubDate,
+                lastUpdateTime: Date.now(),
+                errorCount: 0,
+            };
+        }
+    } catch (error) {
+        pluginState.logger.warn(`初始化订阅基线失败: ${feed.name} - ${error}`);
+    }
+
+    return feed;
 }
 
 export async function checkAllFeeds(): Promise<CheckResult[]> {

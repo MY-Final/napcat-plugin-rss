@@ -9,11 +9,23 @@ import * as rss from '../services/rss';
 import * as storage from '../services/rss/storage';
 import { feedScheduler } from '../core/scheduler';
 import type { FeedConfig, SendMode, Category } from '../types';
-import { DEFAULT_TEMPLATE } from './puppeteer/templates';
+import { DEFAULT_TEMPLATE, applyTemplate } from './puppeteer/templates';
 import { puppeteerClient } from './puppeteer/client';
 
 function generateCategoryId(): string {
     return 'cat_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+function syncSchedulerState(): void {
+    puppeteerClient.setEndpoint(pluginState.config.puppeteerEndpoint);
+
+    if (!pluginState.config.enabled) {
+        feedScheduler.stopAll();
+        return;
+    }
+
+    feedScheduler.stopAll();
+    feedScheduler.startAll();
 }
 
 export function registerApiRoutes(ctx: NapCatPluginContext): void {
@@ -68,6 +80,7 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
                 return res.status(400).json({ code: -1, message: '请求体为空' });
             }
             pluginState.updateConfig(body as Partial<import('../types').PluginConfig>);
+            syncSchedulerState();
             ctx.logger.info('配置已保存');
             res.json({ code: 0, message: 'ok' });
         } catch (err) {
@@ -274,18 +287,61 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
                 sendMode: body.sendMode || pluginState.config.defaultSendMode,
                 groups: body.groups || [],
                 customHtmlTemplate: body.customHtmlTemplate,
+                customForwardTemplate: body.customForwardTemplate,
             };
 
-            storage.addFeed(feed);
+            const initializedFeed = await rss.initializeFeedBaseline(feed);
 
-            if (feed.enabled) {
-                feedScheduler.startFeed(feed);
+            storage.addFeed(initializedFeed);
+
+            if (initializedFeed.enabled) {
+                feedScheduler.startFeed(initializedFeed);
             }
 
-            ctx.logger.info(`添加 RSS 订阅: ${feed.name}`);
-            res.json({ code: 0, data: feed });
+            ctx.logger.info(`添加 RSS 订阅: ${initializedFeed.name}`);
+            res.json({
+                code: 0,
+                data: initializedFeed,
+                message: initializedFeed.lastPublishTime ? '已添加订阅，并已建立首次检查基线' : '已添加订阅',
+            });
         } catch (err) {
             ctx.logger.error('添加订阅失败:', err);
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.postNoAuth('/feeds/validate', async (req, res) => {
+        try {
+            const body = req.body as Partial<FeedConfig> | undefined;
+            if (!body?.url) {
+                return res.status(400).json({ code: -1, message: '缺少 URL 参数' });
+            }
+
+            const previewFeed: FeedConfig = {
+                id: 'preview',
+                url: body.url,
+                name: body.name || new URL(body.url).hostname,
+                enabled: true,
+                updateInterval: pluginState.config.defaultUpdateInterval,
+                sendMode: body.sendMode || pluginState.config.defaultSendMode,
+                groups: [],
+            };
+
+            const result = await rss.testFeed(previewFeed);
+            if (!result.success) {
+                return res.status(400).json({ code: -1, message: result.error || '连接失败' });
+            }
+
+            res.json({
+                code: 0,
+                data: {
+                    title: previewFeed.name,
+                    itemCount: result.items.length,
+                    sample: result.items[0],
+                },
+            });
+        } catch (err) {
+            ctx.logger.error('验证订阅失败:', err);
             res.status(500).json({ code: -1, message: String(err) });
         }
     });
@@ -312,6 +368,10 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
             }
 
             const body = req.body as Partial<FeedConfig> | undefined;
+            if (!body) {
+                return res.status(400).json({ code: -1, message: '请求体为空' });
+            }
+
             const existingFeed = storage.getFeed(feedId);
 
             if (!existingFeed) {
@@ -321,7 +381,16 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
             const wasEnabled = existingFeed.enabled;
             const willBeEnabled = body.enabled ?? wasEnabled;
 
-            storage.updateFeed(feedId, body);
+            let updates = body;
+            if (body.url && body.url !== existingFeed.url) {
+                updates = await rss.initializeFeedBaseline({
+                    ...existingFeed,
+                    ...body,
+                    id: feedId,
+                });
+            }
+
+            storage.updateFeed(feedId, updates);
 
             const updatedFeed = storage.getFeed(feedId);
             if (!updatedFeed) {
@@ -332,7 +401,7 @@ export function registerApiRoutes(ctx: NapCatPluginContext): void {
                 feedScheduler.startFeed(updatedFeed);
             } else if (wasEnabled && !willBeEnabled) {
                 feedScheduler.stopFeed(feedId);
-            } else if (willBeEnabled && (body.updateInterval || body.url)) {
+            } else if (willBeEnabled && (body.updateInterval !== undefined || body.url)) {
                 feedScheduler.startFeed(updatedFeed);
             }
 
@@ -441,7 +510,7 @@ ctx.logger.info(`删除 RSS 订阅: ${feed.name}`);
                 return res.status(404).json({ code: -1, message: '订阅不存在' });
             }
 
-            const items = await feedScheduler.checkUpdate(feedId);
+            const items = await feedScheduler.previewUpdate(feedId);
             res.json({ code: 0, data: { count: items.length, items } });
         } catch (err) {
             ctx.logger.error('检查更新失败:', err);
@@ -483,7 +552,6 @@ ctx.logger.info(`删除 RSS 订阅: ${feed.name}`);
 
         try {
             const variables = vars ? JSON.parse(vars) : {};
-            const { applyTemplate } = require('./puppeteer/templates');
             const rendered = applyTemplate(
                 { name: variables.feedName || '测试', customHtmlTemplate: html } as FeedConfig,
                 {

@@ -112,7 +112,7 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
             const res = await noAuthFetch(`/feeds/${feed.id}/check`, { method: 'POST' })
             if (res.code === 0) {
                 const count = (res.data as { count: number })?.count || 0
-                showToast(`检查完成，发现 ${count} 条更新`, count > 0 ? 'success' : 'info')
+                showToast(`检查完成，发现 ${count} 条可推送更新，未执行推送`, count > 0 ? 'success' : 'info')
             } else {
                 showToast(res.message || '检查失败', 'error')
             }
@@ -244,9 +244,7 @@ export default function FeedsPage({ onRefresh }: FeedsPageProps) {
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className="text-sm text-gray-600 dark:text-gray-300">
-                                            {feed.updateInterval >= 60 && feed.updateInterval % 60 === 0 
-                                                ? `${feed.updateInterval / 60} 分钟` 
-                                                : `${feed.updateInterval} 秒`}
+                                            {feed.updateInterval} 分钟
                                         </span>
                                     </td>
                                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -415,9 +413,7 @@ function FeedDetailModal({
                         <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
                             <label className="text-xs text-gray-400 uppercase font-medium">轮询间隔</label>
                             <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                                        {feed.updateInterval >= 60 && feed.updateInterval % 60 === 0 
-                                            ? `${feed.updateInterval / 60} 分钟` 
-                                            : `${feed.updateInterval} 秒`}
+                                {feed.updateInterval} 分钟
                                     </p>
                         </div>
                     </div>
@@ -515,15 +511,13 @@ function FeedModal({
         setTesting(true)
         setTestResult(null)
         try {
-            const res = await noAuthFetch<{ id: string }>('/feeds', {
+            const res = await noAuthFetch<{ title: string; itemCount: number }>('/feeds/validate', {
                 method: 'POST',
                 body: JSON.stringify({ url, name: 'test' })
             })
             if (res.code === 0) {
-                setTestResult({ success: true, message: 'RSS 源连接成功！' })
-                if (res.data?.id) {
-                    await noAuthFetch(`/feeds/${res.data.id}`, { method: 'DELETE' })
-                }
+                const itemCount = res.data?.itemCount ?? 0
+                setTestResult({ success: true, message: `RSS 源连接成功，读取到 ${itemCount} 条预览内容` })
             } else {
                 setTestResult({ success: false, message: res.message || '连接失败' })
             }
@@ -675,51 +669,19 @@ required
                             <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-1.5">
                                 <input
                                     type="number"
-                                    value={updateInterval >= 60 ? Math.round(updateInterval / 60) : updateInterval}
-                                    onChange={(e) => {
-                                        const num = Number(e.target.value) || 1
-                                        const isMinute = updateInterval >= 60 && updateInterval % 60 === 0
-                                        if (isMinute) {
-                                            setUpdateInterval(num * 60)
-                                        } else {
-                                            setUpdateInterval(num)
-                                        }
-                                    }}
+                                    value={updateInterval}
+                                    onChange={(e) => setUpdateInterval(Math.max(1, Number(e.target.value) || 1))}
                                     className="w-16 bg-transparent text-center text-sm font-medium outline-none"
                                     min={1}
                                     max={1440}
                                 />
-                                <select
-                                    value={updateInterval >= 60 && updateInterval % 60 === 0 ? 'minute' : 'second'}
-                                    onChange={(e) => {
-                                        const currentVal = updateInterval >= 60 
-                                            ? Math.round(updateInterval / 60) 
-                                            : updateInterval
-                                        if (e.target.value === 'second') {
-                                            setUpdateInterval(currentVal)
-                                        } else {
-                                            setUpdateInterval(currentVal * 60)
-                                        }
-                                    }}
-                                    className="bg-transparent text-xs text-gray-400 outline-none"
-                                >
-                                    <option value="second">秒</option>
-                                    <option value="minute">分钟</option>
-                                </select>
+                                <span className="bg-transparent text-xs text-gray-400">分钟</span>
                             </div>
                             <div className="flex items-center gap-1 text-xs text-gray-400">
                                 <input
                                     type="range"
-                                    value={updateInterval >= 60 ? Math.round(updateInterval / 60) : updateInterval}
-                                    onChange={(e) => {
-                                        const val = Number(e.target.value)
-                                        const isMinute = updateInterval >= 60 && updateInterval % 60 === 0
-                                        if (isMinute) {
-                                            setUpdateInterval(val * 60)
-                                        } else {
-                                            setUpdateInterval(val)
-                                        }
-                                    }}
+                                    value={updateInterval}
+                                    onChange={(e) => setUpdateInterval(Number(e.target.value))}
                                     min={1}
                                     max={120}
                                     className="w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"

@@ -124,47 +124,19 @@ export default function ConfigPage() {
 
                     <div>
                         <div className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">默认轮询间隔</div>
-                        <div className="text-xs text-gray-400 mb-3">RSS 源更新检测间隔</div>
+                        <div className="text-xs text-gray-400 mb-3">RSS 源更新检测间隔，统一按分钟配置</div>
                         <div className="flex items-center gap-3">
                             <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-1.5">
                                 <input
                                     type="number"
-                                    className="w-16 bg-transparent text-center text-sm font-medium outline-none"
-                                    value={config.defaultUpdateInterval >= 60 ? Math.round(config.defaultUpdateInterval / 60) : config.defaultUpdateInterval}
-                                    onChange={(e) => {
-                                        const num = Number(e.target.value) || 1
-                                        const isMinute = config.defaultUpdateInterval >= 60 && config.defaultUpdateInterval % 60 === 0
-                                        if (isMinute) {
-                                            updateField('defaultUpdateInterval', num * 60)
-                                        } else {
-                                            updateField('defaultUpdateInterval', num)
-                                        }
-                                    }}
+                                    className="w-20 bg-transparent text-center text-sm font-medium outline-none"
+                                    value={config.defaultUpdateInterval}
+                                    onChange={(e) => updateField('defaultUpdateInterval', Math.max(1, Number(e.target.value) || 1))}
                                     min={1}
                                 />
-                                <select
-                                    className="bg-transparent text-xs text-gray-400 outline-none"
-                                    value={config.defaultUpdateInterval >= 60 && config.defaultUpdateInterval % 60 === 0 ? 'minute' : 'second'}
-                                    onChange={(e) => {
-                                        const currentVal = config.defaultUpdateInterval >= 60 
-                                            ? Math.round(config.defaultUpdateInterval / 60) 
-                                            : config.defaultUpdateInterval
-                                        if (e.target.value === 'second') {
-                                            updateField('defaultUpdateInterval', currentVal)
-                                        } else {
-                                            updateField('defaultUpdateInterval', currentVal * 60)
-                                        }
-                                    }}
-                                >
-                                    <option value="second">秒</option>
-                                    <option value="minute">分钟</option>
-                                </select>
+                                <span className="text-xs text-gray-400">分钟</span>
                             </div>
-                            <span className="text-xs text-gray-400">
-                                {config.defaultUpdateInterval >= 60 && config.defaultUpdateInterval % 60 === 0 
-                                    ? `(${config.defaultUpdateInterval / 60} 分钟)` 
-                                    : `(${config.defaultUpdateInterval} 秒)`}
-                            </span>
+                            <span className="text-xs text-gray-400">({config.defaultUpdateInterval} 分钟)</span>
                         </div>
                     </div>
                 </div>

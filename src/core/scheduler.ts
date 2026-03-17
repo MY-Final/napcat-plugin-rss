@@ -10,8 +10,14 @@ import { pluginState } from './state';
 
 class FeedScheduler {
     private timers: Map<string, ReturnType<typeof setInterval>> = new Map();
+    private runningFeeds: Set<string> = new Set();
 
     startAll(): void {
+        if (!pluginState.config.enabled) {
+            pluginState.logger.info('RSS 插件已禁用，跳过调度器启动');
+            return;
+        }
+
         const feeds = rss.getEnabledFeeds();
         for (const feed of feeds) {
             this.startFeed(feed);
@@ -20,12 +26,17 @@ class FeedScheduler {
     }
 
     startFeed(feed: FeedConfig): void {
+        if (!pluginState.config.enabled || !feed.enabled) {
+            this.stopFeed(feed.id);
+            return;
+        }
+
         if (this.timers.has(feed.id)) {
             this.stopFeed(feed.id);
         }
 
         const isDebug = pluginState.config.debug;
-        const intervalMinutes = isDebug && feed.updateInterval === 30 ? 1 : feed.updateInterval;
+        const intervalMinutes = isDebug && feed.updateInterval === 30 ? 1 : Math.max(1, feed.updateInterval);
         const intervalMs = intervalMinutes * 60 * 1000;
         
         const timer = setInterval(async () => {
@@ -55,34 +66,70 @@ class FeedScheduler {
             pluginState.logger.debug(`停止 RSS 定时任务: ${feedId}`);
         }
         this.timers.clear();
+        this.runningFeeds.clear();
         pluginState.logger.info('RSS 调度器已停止');
     }
 
     async checkUpdate(feedId: string): Promise<FeedItem[]> {
+        if (!pluginState.config.enabled) {
+            return [];
+        }
+
         const feed = rss.getFeed(feedId);
         if (!feed || !feed.enabled) {
             return [];
         }
 
-        const result = await rss.checkFeedUpdate(feed);
-
-        if (!result.success) {
-            pluginState.logger.error(`RSS 检查失败: ${feed.name} - ${result.error}`);
+        if (this.runningFeeds.has(feedId)) {
+            pluginState.logger.debug(`RSS 检查跳过，任务仍在执行: ${feed.name}`);
             return [];
         }
 
-        if (result.newItems.length === 0) {
-            return [];
-        }
+        this.runningFeeds.add(feedId);
 
-        pluginState.logger.info(`RSS 更新: ${feed.name} - ${result.newItems.length} 条新内容`);
+        try {
+            const result = await rss.checkFeedUpdate(feed);
 
-        for (const groupId of feed.groups) {
-            try {
-                await this.sendToGroup(feed, groupId, result.newItems);
-            } catch (error) {
-                pluginState.logger.error(`推送失败: ${feed.name} -> 群 ${groupId}: ${error}`);
+            if (!result.success) {
+                pluginState.logger.error(`RSS 检查失败: ${feed.name} - ${result.error}`);
+                return [];
             }
+
+            if (result.newItems.length === 0) {
+                return [];
+            }
+
+            pluginState.logger.info(`RSS 更新: ${feed.name} - ${result.newItems.length} 条新内容`);
+
+            for (const groupId of feed.groups) {
+                if (!pluginState.isGroupEnabled(groupId)) {
+                    pluginState.logger.debug(`跳过已禁用群的推送: ${feed.name} -> 群 ${groupId}`);
+                    continue;
+                }
+
+                try {
+                    await this.sendToGroup(feed, groupId, result.newItems);
+                    pluginState.incrementProcessed();
+                } catch (error) {
+                    pluginState.logger.error(`推送失败: ${feed.name} -> 群 ${groupId}: ${error}`);
+                }
+            }
+
+            return result.newItems;
+        } finally {
+            this.runningFeeds.delete(feedId);
+        }
+    }
+
+    async previewUpdate(feedId: string): Promise<FeedItem[]> {
+        const feed = rss.getFeed(feedId);
+        if (!feed) {
+            return [];
+        }
+
+        const result = await rss.previewFeedUpdate(feed);
+        if (!result.success) {
+            throw new Error(result.error || '检查更新失败');
         }
 
         return result.newItems;

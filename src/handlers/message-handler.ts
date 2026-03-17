@@ -6,12 +6,13 @@
 import type { OB11Message } from 'napcat-types/napcat-onebot';
 import type { NapCatPluginContext } from 'napcat-types/napcat-onebot/network/plugin/types';
 import { pluginState } from '../core/state';
-import { sendGroupMessage } from '../services/message/text';
+import { sendGroupMessage, sendSingle } from '../services/message/text';
 import { sendForward } from '../services/message/forward';
+import { sendPuppeteer } from '../services/message/image';
 import * as rss from '../services/rss';
 import * as storage from '../services/rss/storage';
 import { feedScheduler } from '../core/scheduler';
-import { testFeed } from '../services/rss/fetcher';
+import { initializeFeedBaseline, testFeed } from '../services/rss/fetcher';
 
 const cooldownMap = new Map<string, number>();
 
@@ -62,7 +63,7 @@ export async function handleMessage(ctx: NapCatPluginContext, event: OB11Message
                 if (messageType === 'group' && groupId) {
                     const remaining = getCooldownRemaining(groupId, 'add');
                     if (remaining > 0) {
-                        await sendGroupMessage(ctx, groupId, `请等待 ${remaining} 秒后再试`);
+                        await sendGroupMessage(ctx, String(groupId), `请等待 ${remaining} 秒后再试`);
                         return;
                     }
                 }
@@ -116,7 +117,7 @@ async function sendHelp(ctx: NapCatPluginContext, event: OB11Message): Promise<v
         `${prefix} test <id> - 测试推送`,
         `${prefix} enable <id> - 启用订阅`,
         `${prefix} disable <id> - 禁用订阅`,
-        `${prefix} check <id> - 手动检查更新`,
+        `${prefix} check <id> - 手动检查更新（不推送）`,
         `${prefix} status - 查看状态`,
         `${prefix} cat add <name> - 添加分类`,
         `${prefix} cat del <id> - 删除分类`,
@@ -147,7 +148,7 @@ async function handleAdd(
     const name = args.slice(1).join(' ') || new URL(url).hostname;
 
     const feedId = storage.generateFeedId();
-    const feed = storage.getAllFeeds()[feedId] = {
+    const feed = {
         id: feedId,
         url,
         name,
@@ -157,13 +158,15 @@ async function handleAdd(
         groups: event.group_id ? [String(event.group_id)] : [],
     };
 
-    storage.addFeed(feed);
-    feedScheduler.startFeed(feed);
+    const initializedFeed = await initializeFeedBaseline(feed);
+
+    storage.addFeed(initializedFeed);
+    feedScheduler.startFeed(initializedFeed);
 
     await sendGroupMessage(
         ctx, 
         String(event.group_id), 
-        `已添加订阅: ${name}\nURL: ${url}\nID: ${feedId}`
+        `已添加订阅: ${name}\nURL: ${url}\nID: ${feedId}\n首次检查将从当前最新内容开始，不补发历史消息`
     );
 
     if (event.message_type === 'group' && event.group_id) {
@@ -211,9 +214,7 @@ async function handleList(
     for (const feed of feedList) {
         const status = feed.enabled ? '✅' : '❌';
         const modeText = { single: '单条', forward: '合并', puppeteer: '图片' }[feed.sendMode];
-        const intervalText = feed.updateInterval >= 60 && feed.updateInterval % 60 === 0
-            ? `${feed.updateInterval / 60}分钟`
-            : `${feed.updateInterval}秒`;
+        const intervalText = `${feed.updateInterval}分钟`;
         lines.push(`${status} ${feed.name} (${feed.id})`);
         lines.push(`   模式: ${modeText} | 群: ${feed.groups.length}个 | 间隔: ${intervalText}`);
     }
@@ -250,8 +251,8 @@ async function handleSet(
             break;
         case 'updateInterval':
             const interval = parseInt(value, 10);
-            if (isNaN(interval) || interval < 5) {
-                await sendGroupMessage(ctx, String(event.group_id), '间隔时间不能小于5分钟');
+            if (isNaN(interval) || interval < 1) {
+                await sendGroupMessage(ctx, String(event.group_id), '轮询间隔不能小于 1 分钟');
                 return;
             }
             storage.updateFeed(feedId, { updateInterval: interval });
@@ -313,12 +314,13 @@ async function handleTest(
     }
 
     if (feed.sendMode === 'forward') {
-        await sendForward(ctx, String(event.group_id), result.items.slice(0, 3));
+        await sendForward(feed, String(event.group_id), result.items.slice(0, 3));
     } else {
         for (const item of result.items.slice(0, 3)) {
             if (feed.sendMode === 'single') {
-                const { sendSingle } = await import('../services/message/text');
                 await sendSingle(feed, String(event.group_id), item);
+            } else if (feed.sendMode === 'puppeteer') {
+                await sendPuppeteer(feed, String(event.group_id), item);
             }
         }
     }
@@ -388,7 +390,7 @@ async function handleCheck(
 
     await sendGroupMessage(ctx, String(event.group_id), `正在检查: ${feed.name}...`);
 
-    const items = await feedScheduler.checkUpdate(feedId);
+    const items = await feedScheduler.previewUpdate(feedId);
 
     if (items.length === 0) {
         await sendGroupMessage(ctx, String(event.group_id), `${feed.name} 暂无更新`);
@@ -396,7 +398,7 @@ async function handleCheck(
         await sendGroupMessage(
             ctx, 
             String(event.group_id), 
-            `${feed.name} 发现 ${items.length} 条更新并已推送`
+            `${feed.name} 发现 ${items.length} 条潜在更新，未执行推送`
         );
     }
 }
