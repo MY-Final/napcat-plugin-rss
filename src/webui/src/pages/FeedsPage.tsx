@@ -578,6 +578,9 @@ function FeedModal({
     const [batchWindowMinutes, setBatchWindowMinutes] = useState(feed?.batchWindowMinutes || 0)
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+    const [previewHtml, setPreviewHtml] = useState('')
+    const [previewLoading, setPreviewLoading] = useState(false)
+    const [previewError, setPreviewError] = useState('')
 
     const parseKeywords = (value: string) => value
         .split(/\r?\n|,|，/)
@@ -585,6 +588,14 @@ function FeedModal({
         .filter(Boolean)
 
     const autoName = url.startsWith('http') ? new URL(url).hostname : ''
+    const previewVariables = {
+        feedName: name || autoName || 'RSS 订阅',
+        title: '这是一个更接近真实效果的模板预览标题',
+        link: url || 'https://github.com/MY-Final/napcat-plugin-rss',
+        description: '这里会展示文章摘要、发布时间和链接等内容。你可以在右侧调整模板后立即预览，确保图片渲染风格符合预期。',
+        author: 'napcat-plugin-rss',
+        image: 'https://opengraph.githubassets.com/1/MY-Final/napcat-plugin-rss',
+    }
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -636,6 +647,29 @@ function FeedModal({
         setTesting(false)
     }
 
+    const loadPreview = async () => {
+        setPreviewLoading(true)
+        setPreviewError('')
+        try {
+            const res = await noAuthFetch<string>('/template/preview', {
+                method: 'POST',
+                body: JSON.stringify({
+                    html: customHtml || '<div>{{title}}</div>',
+                    vars: previewVariables,
+                }),
+            })
+
+            if (res.code === 0 && res.data) {
+                setPreviewHtml(res.data)
+            } else {
+                setPreviewError(res.message || '预览生成失败')
+            }
+        } catch (e: any) {
+            setPreviewError(e.message || '预览生成失败')
+        }
+        setPreviewLoading(false)
+    }
+
     const toggleGroup = (groupId: string) => {
         setSelectedGroups((prev) =>
             prev.includes(groupId) ? prev.filter((g) => g !== groupId) : [...prev, groupId]
@@ -654,17 +688,29 @@ function FeedModal({
         setSendMode(enablePuppeteer ? 'puppeteer' : 'forward')
     }
 
+    useEffect(() => {
+        if (sendMode !== 'puppeteer') return
+
+        const timer = window.setTimeout(() => {
+            loadPreview()
+        }, 250)
+
+        return () => window.clearTimeout(timer)
+    }, [sendMode, customHtml, name, url])
+
     return createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className={`bg-white dark:bg-gray-800 rounded-[28px] w-full shadow-2xl max-h-[92vh] overflow-hidden flex flex-col border border-white/60 dark:border-gray-700 ${sendMode === 'puppeteer' ? 'max-w-6xl' : 'max-w-xl'}`} onClick={(e) => e.stopPropagation()}>
                 <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white">
-                            {feed ? '✏️' : '➕'}
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-rose-500 via-orange-400 to-amber-300 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 12h16M4 18h10" />
+                            </svg>
                         </div>
                         <div>
                             <h3 className="font-semibold text-lg">{feed ? '编辑订阅' : '添加订阅'}</h3>
-                            <p className="text-xs text-gray-400">{feed ? '修改订阅配置' : '创建新的 RSS 订阅'}</p>
+                            <p className="text-xs text-gray-400">{feed ? '修改订阅配置和消息样式' : '创建新的 RSS 订阅并预览消息效果'}</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
@@ -674,7 +720,8 @@ function FeedModal({
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-5 space-y-5 overflow-y-auto flex-1">
+                <form onSubmit={handleSubmit} className={`p-5 overflow-y-auto flex-1 ${sendMode === 'puppeteer' ? 'grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-6 items-start' : 'space-y-5'}`}>
+                    <div className="space-y-5 min-w-0">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">RSS 地址 <span className="text-red-500">*</span></label>
                         <div className="flex gap-2">
@@ -955,20 +1002,29 @@ required
                     </div>
 
                     {sendMode === 'puppeteer' && (
-                        <div>
-                            <div className="flex items-center justify-between mb-2">
+                        <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/40 bg-gradient-to-br from-amber-50 to-rose-50 dark:from-amber-950/20 dark:to-rose-950/20 p-4">
+                            <div className="flex items-center justify-between mb-3">
                                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                     自定义 HTML 模板
                                 </label>
-                                <button 
-                                    type="button" 
-                                    onClick={() => setCustomHtml('')} 
-                                    className="text-xs text-gray-400 hover:text-gray-500"
-                                >
-                                    清空
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={loadPreview}
+                                        className="text-xs text-amber-600 hover:text-amber-700"
+                                    >
+                                        刷新预览
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setCustomHtml('')} 
+                                        className="text-xs text-gray-400 hover:text-gray-500"
+                                    >
+                                        清空
+                                    </button>
+                                </div>
                             </div>
-                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-3">
+                            <div className="bg-white/70 dark:bg-black/10 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mb-3">
                                 <div className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-2">可用变量：</div>
                                 <div className="flex flex-wrap gap-1.5">
                                     {['{{title}}', '{{link}}', '{{description}}', '{{author}}', '{{pubDate}}', '{{image}}', '{{feedName}}'].map((v) => (
@@ -986,11 +1042,11 @@ required
                             <textarea
                                 value={customHtml}
                                 onChange={(e) => setCustomHtml(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 font-mono text-xs focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                                rows={6}
+                                className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-600 bg-white/90 dark:bg-gray-800 font-mono text-xs leading-6 focus:ring-2 focus:ring-amber-400 focus:border-transparent transition-all"
+                                rows={12}
                                 placeholder="<body>{{title}}</body>"
                             />
-<p className="text-xs text-gray-400 mt-1.5">留空使用默认模板</p>
+                            <p className="text-xs text-gray-500 mt-2">留空使用默认模板。若模板包含远程脚本或远程字体，系统会自动回退到内置模板。</p>
                         </div>
                     )}
 
@@ -1059,6 +1115,46 @@ required
                             保存
                         </button>
                     </div>
+                    </div>
+
+                    {sendMode === 'puppeteer' && (
+                        <div className="sticky top-0">
+                            <div className="rounded-[24px] overflow-hidden border border-gray-200 dark:border-gray-700 bg-[linear-gradient(160deg,#fff7ed_0%,#fff1f2_45%,#ffffff_100%)] dark:bg-gray-900 shadow-xl shadow-orange-100/60 dark:shadow-none">
+                                <div className="px-5 py-4 border-b border-gray-200/80 dark:border-gray-700 flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">模板预览</h4>
+                                        <p className="text-xs text-gray-500 mt-1">保存前先看效果，减少渲染翻车</p>
+                                    </div>
+                                    <div className="text-xs text-gray-400">{previewLoading ? '生成中...' : '实时预览'}</div>
+                                </div>
+                                <div className="p-4 space-y-3">
+                                    <div className="rounded-2xl border border-white/70 dark:border-gray-700 bg-white/80 dark:bg-gray-950 overflow-hidden shadow-sm min-h-[520px]">
+                                        {previewError ? (
+                                            <div className="h-[520px] flex items-center justify-center px-6 text-center text-sm text-red-500">
+                                                {previewError}
+                                            </div>
+                                        ) : previewHtml ? (
+                                            <iframe
+                                                title="template-preview"
+                                                srcDoc={previewHtml}
+                                                className="w-full h-[520px] bg-white"
+                                            />
+                                        ) : (
+                                            <div className="h-[520px] flex items-center justify-center text-sm text-gray-400">
+                                                预览将在这里显示
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="rounded-2xl bg-white/70 dark:bg-gray-900/70 border border-gray-200 dark:border-gray-700 p-4 text-xs text-gray-500 space-y-2">
+                                        <div className="font-medium text-gray-700 dark:text-gray-200">预览样例</div>
+                                        <div>订阅名：{previewVariables.feedName}</div>
+                                        <div className="truncate">链接：{previewVariables.link}</div>
+                                        <div>建议：卡片宽度控制在 640-760px，避免在聊天窗口中过宽。</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </form>
             </div>
         </div>,

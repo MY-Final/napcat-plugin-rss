@@ -558,6 +558,21 @@ ctx.logger.info(`删除 RSS 订阅: ${feed.name}`);
         res.json({ code: 0, data: DEFAULT_TEMPLATE });
     });
 
+    const previewTemplate = (html: string, variablesRaw: unknown) => {
+        const variables = typeof variablesRaw === 'string' ? JSON.parse(variablesRaw) : (variablesRaw || {});
+        return applyTemplate(
+            { name: (variables as Record<string, string>).feedName || '测试订阅', customHtmlTemplate: html } as FeedConfig,
+            {
+                title: (variables as Record<string, string>).title || '这是一个更接近真实效果的模板预览标题',
+                link: (variables as Record<string, string>).link || 'https://github.com/MY-Final/napcat-plugin-rss',
+                description: (variables as Record<string, string>).description || '这里会展示文章摘要、发布时间和链接等内容。你可以在右侧调整自定义 HTML 模板，实时查看卡片最终效果，避免保存后才发现排版异常。',
+                pubDate: Date.now(),
+                author: (variables as Record<string, string>).author || 'napcat-plugin-rss',
+                image: (variables as Record<string, string>).image || 'https://opengraph.githubassets.com/1/MY-Final/napcat-plugin-rss',
+            }
+        );
+    };
+
     router.getNoAuth('/template/preview', (req, res) => {
         const html = req.query?.html as string;
         const vars = req.query?.vars as string;
@@ -567,19 +582,20 @@ ctx.logger.info(`删除 RSS 订阅: ${feed.name}`);
         }
 
         try {
-            const variables = vars ? JSON.parse(vars) : {};
-            const rendered = applyTemplate(
-                { name: variables.feedName || '测试', customHtmlTemplate: html } as FeedConfig,
-                {
-                    title: variables.title || '测试标题',
-                    link: variables.link || 'https://example.com',
-                    description: variables.description || '这是一条测试描述内容',
-                    pubDate: Date.now(),
-                    author: variables.author || '测试作者',
-                    image: variables.image || '',
-                }
-            );
-            res.json({ code: 0, data: rendered });
+            res.json({ code: 0, data: previewTemplate(html, vars) });
+        } catch (err) {
+            res.status(500).json({ code: -1, message: String(err) });
+        }
+    });
+
+    router.postNoAuth('/template/preview', (req, res) => {
+        const body = req.body as { html?: string; vars?: unknown } | undefined;
+        if (!body?.html) {
+            return res.status(400).json({ code: -1, message: '缺少 HTML 参数' });
+        }
+
+        try {
+            res.json({ code: 0, data: previewTemplate(body.html, body.vars) });
         } catch (err) {
             res.status(500).json({ code: -1, message: String(err) });
         }
