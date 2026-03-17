@@ -157,6 +157,9 @@ class PluginState {
 
     /** 获取数据文件完整路径 */
     getDataFilePath(filename: string): string {
+        if (!this._ctx) {
+            throw new Error('PluginState 尚未初始化，请先调用 init()');
+        }
         return path.join(this.ctx.dataPath, filename);
     }
 
@@ -169,6 +172,9 @@ class PluginState {
      * @param defaultValue 文件不存在或解析失败时的默认值
      */
     loadDataFile<T>(filename: string, defaultValue: T): T {
+        if (!this._ctx) {
+            return defaultValue;
+        }
         const filePath = this.getDataFilePath(filename);
         try {
             if (fs.existsSync(filePath)) {
@@ -186,6 +192,9 @@ class PluginState {
      * @param data 要保存的数据
      */
     saveDataFile<T>(filename: string, data: T): void {
+        if (!this._ctx) {
+            return;
+        }
         const filePath = this.getDataFilePath(filename);
         try {
             fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');

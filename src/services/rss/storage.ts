@@ -34,6 +34,11 @@ function ensureRuntimeStore(): Record<string, FeedRuntime> {
         return runtimeStore;
     }
 
+    if (!pluginState.isInitialized) {
+        runtimeStore = {};
+        return runtimeStore;
+    }
+
     runtimeStore = pluginState.loadDataFile<Record<string, FeedRuntime>>(RUNTIME_FILE, {});
 
     const feeds = pluginState.config.feeds || {};
@@ -71,7 +76,7 @@ function ensureRuntimeStore(): Record<string, FeedRuntime> {
 }
 
 function saveRuntimeStore(): void {
-    if (!runtimeStore) {
+    if (!runtimeStore || !pluginState.isInitialized) {
         return;
     }
     pluginState.saveDataFile(RUNTIME_FILE, runtimeStore);
@@ -98,6 +103,10 @@ function mergeFeed(feed: FeedConfig): FeedConfig {
 }
 
 function patchFeed(id: string, updates: Partial<FeedConfig>, logMessage?: string): boolean {
+    if (!pluginState.isInitialized) {
+        return false;
+    }
+
     const feeds = pluginState.config.feeds || {};
     const existingFeed = feeds[id];
     if (!existingFeed) {
@@ -126,7 +135,7 @@ function patchFeed(id: string, updates: Partial<FeedConfig>, logMessage?: string
         saveRuntimeStore();
     }
 
-    if (logMessage) {
+    if (logMessage && pluginState.isInitialized) {
         pluginState.logger.info(logMessage);
     }
 

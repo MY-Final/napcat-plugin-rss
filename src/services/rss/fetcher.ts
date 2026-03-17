@@ -16,6 +16,14 @@ export interface CheckResult {
     error?: string;
 }
 
+function logIfReady(level: 'info' | 'warn' | 'error', message: string): void {
+    if (!pluginState.isInitialized) {
+        return;
+    }
+
+    pluginState.logger[level](message);
+}
+
 function buildItemFingerprint(item: FeedItem): string {
     const fingerprintSource = [
         item.link || '',
@@ -108,9 +116,7 @@ export async function checkFeedUpdate(feed: FeedConfig): Promise<CheckResult> {
 
         if (matchedItems.length > 0) {
             result.newItems = matchedItems;
-            pluginState.logger.info(
-                `RSS 更新检测: ${feed.name} - 发现 ${matchedItems.length} 条新内容`
-            );
+            logIfReady('info', `RSS 更新检测: ${feed.name} - 发现 ${matchedItems.length} 条新内容`);
         } else {
             storage.markFeedCheckSuccess(feed.id);
         }
@@ -123,7 +129,7 @@ export async function checkFeedUpdate(feed: FeedConfig): Promise<CheckResult> {
     } catch (error) {
         result.error = error instanceof Error ? error.message : String(error);
         storage.markFeedError(feed.id, result.error);
-        pluginState.logger.error(`RSS 更新检测失败: ${feed.name} - ${result.error}`);
+        logIfReady('error', `RSS 更新检测失败: ${feed.name} - ${result.error}`);
     }
 
     return result;
@@ -169,7 +175,7 @@ export async function initializeFeedBaseline(feed: FeedConfig): Promise<FeedConf
             lastErrorTime: undefined,
         };
     } catch (error) {
-        pluginState.logger.warn(`初始化订阅基线失败: ${feed.name} - ${error}`);
+        logIfReady('warn', `初始化订阅基线失败: ${feed.name} - ${error}`);
     }
 
     return feed;
