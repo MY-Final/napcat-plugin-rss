@@ -31,8 +31,9 @@ export class PuppeteerClient {
             quality: options.quality,
             fullPage: options.fullPage ?? false,
             setViewport: options.setViewport,
-            waitSelector: options.waitForSelector,
+            waitForSelector: options.waitForSelector,
             waitForTimeout: options.waitForTimeout,
+            pageGotoParams: options.pageGotoParams,
             encoding: options.encoding || 'base64',
         };
 
@@ -71,7 +72,13 @@ export class PuppeteerClient {
             file_type: 'htmlString',
             type: 'png',
             fullPage: false,
+            selector: '.card',
             setViewport: { width: 600, height: 400, deviceScaleFactor: 2 },
+            pageGotoParams: {
+                waitUntil: 'domcontentloaded',
+                timeout: 10000,
+            },
+            waitForTimeout: 300,
             ...options,
         });
     }

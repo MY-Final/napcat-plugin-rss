@@ -126,7 +126,7 @@ export const DEFAULT_TEMPLATE = `<!DOCTYPE html>
         <section class="content">
             {{#if image}}
             <div class="image-wrap">
-                <img src="{{image}}" alt="cover" onerror="this.parentElement.style.display='none'">
+                <img src="{{image}}" alt="cover" loading="eager" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none'">
             </div>
             {{/if}}
             {{#if description}}
